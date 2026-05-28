@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark">
+  <title>Color Lab Pro</title>
+
+  <!-- Shared design system from parent project -->
+  <link rel="stylesheet" href="../../css/theme.css">
+  <link rel="stylesheet" href="../../css/components.css">
+
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Custom Titlebar ───────────────────────────────────── */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      height: 38px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .titlebar-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--colorlab-color);
+      flex-shrink: 0;
+      opacity: 0.9;
+    }
+
+    .titlebar-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-bright);
+      letter-spacing: 0.02em;
+      flex: 1;
+    }
+
+    .titlebar-name span { color: var(--colorlab-color); }
+
+    .titlebar-version {
+      font-size: 9px;
+      color: var(--text-dim);
+      font-weight: 400;
+      margin-left: 5px;
+      letter-spacing: 0;
+    }
+
+    /* AE connection badge */
+    .ae-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 2px 8px 2px 5px;
+      -webkit-app-region: no-drag;
+      cursor: default;
+    }
+
+    .ae-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+      transition: background 0.4s;
+    }
+
+    .ae-dot.connected    { background: var(--success); box-shadow: 0 0 4px var(--success); }
+    .ae-dot.disconnected { background: var(--danger); }
+
+    /* Traffic-light window controls */
+    .win-controls {
+      display: flex;
+      gap: 6px;
+      -webkit-app-region: no-drag;
+      margin-left: 4px;
+    }
+
+    .win-btn {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+      transition: filter var(--t-fast);
+    }
+
+    .win-btn.minimize { background: #fbbf24; }
+    .win-btn.close    { background: #f87171; }
+    .win-btn:hover { filter: brightness(1.25); }
+
+    /* ── Plugin header bar ─────────────────────────────────── */
+    .plugin-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px 7px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .plugin-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .plugin-tag {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--colorlab-color);
+      background: rgba(232, 121, 249, 0.1);
+      border: 1px solid rgba(232, 121, 249, 0.22);
+      border-radius: var(--radius-pill);
+      padding: 2px 8px;
+    }
+
+    .plugin-header-desc {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    /* Reset all button */
+    .reset-all-btn {
+      font-size: 9px;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 3px 8px;
+      cursor: pointer;
+      transition: color var(--t-base), border-color var(--t-base);
+      font-family: var(--font-ui);
+    }
+
+    .reset-all-btn:hover { color: var(--text); border-color: var(--border-light); }
+
+    /* ── Scroll area ───────────────────────────────────────── */
+    .main-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      --tab-color: var(--colorlab-color);
+    }
+
+    /* Section labels (same redesign as panel) */
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-muted);
+      margin: 14px 0 6px;
+      line-height: 1;
+    }
+
+    .section-label::before {
+      content: '';
+      width: 2px;
+      height: 12px;
+      background: var(--tab-color, var(--border-light));
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .section-label:first-child { margin-top: 4px; }
+
+    /* Action button (magenta for standalone, matches Color Lab color) */
+    .action-btn {
+      width: 100%;
+      padding: 10px 16px;
+      background: var(--colorlab-color);
+      color: #fff;
+      border-radius: var(--radius-md);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      border: none;
+      font-family: var(--font-ui);
+      transition: background var(--t-base), box-shadow var(--t-base), opacity var(--t-base), transform var(--t-fast);
+      margin-top: 10px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .action-btn:hover {
+      background: #ed8efa;
+      box-shadow: 0 0 20px rgba(232,121,249,0.3), 0 1px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+
+    .action-btn:active { opacity: 0.85; transform: translateY(1px); box-shadow: none; }
+    .action-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    .action-btn.loading { opacity: 0.75; cursor: wait; }
+    .action-btn.loading::after {
+      content: '';
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: ae-spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes ae-spin { to { transform: rotate(360deg); } }
+
+    /* Status bar */
+    .status-bar {
+      margin-top: 8px;
+      padding: 6px 10px;
+      font-size: 10px;
+      color: var(--text-dim);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color var(--t-slow), border-color var(--t-slow);
+    }
+
+    .status-bar:not(:empty)::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
+    .status-bar.success { color: var(--success); border-color: rgba(74,222,128,0.2); background: rgba(74,222,128,0.05); }
+    .status-bar.error   { color: var(--danger);  border-color: rgba(248,113,113,0.2); background: rgba(248,113,113,0.05); }
+
+    /* ── Bottom footer: presets ────────────────────────────── */
+    .preset-footer {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px 9px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+    }
+
+    .preset-footer select {
+      flex: 1;
+      padding: 5px 22px 5px 7px;
+      font-size: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23606060'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      cursor: pointer;
+      font-family: var(--font-ui);
+      transition: border-color var(--t-base);
+    }
+
+    .preset-footer select:focus { border-color: var(--colorlab-color); outline: none; }
+
+    .preset-footer-label {
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    /* Grid helpers */
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Titlebar -->
+  <div class="titlebar">
+    <svg class="titlebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+      <circle cx="8" cy="8" r="5.5"/>
+      <path d="M8 2.5 L8 8 L12.5 5.5"/>
+      <path d="M8 8 L3.5 10.5"/>
+      <path d="M8 8 L8 13.5"/>
+    </svg>
+    <div class="titlebar-name">
+      Color Lab <span>Pro</span>
+      <span class="titlebar-version">v1.0</span>
+    </div>
+    <div class="ae-badge">
+      <div class="ae-dot" id="ae-dot"></div>
+      <span id="ae-text">Connecting…</span>
+    </div>
+    <div class="win-controls">
+      <button class="win-btn minimize" id="btn-min" title="Minimize" aria-label="Minimize"></button>
+      <button class="win-btn close"    id="btn-cls" title="Close"    aria-label="Close"></button>
+    </div>
+  </div>
+
+  <!-- Plugin header -->
+  <div class="plugin-header">
+    <div class="plugin-header-left">
+      <span class="plugin-tag">Colorista-Style Grading</span>
+      <span class="plugin-header-desc">Lift · Gamma · Gain + Film Looks + HSL</span>
+    </div>
+    <button class="reset-all-btn" id="btn-reset-all">Reset All</button>
+  </div>
+
+  <!-- Scrollable controls injected here by ColorLabUI -->
+  <div class="main-scroll" id="controls"></div>
+
+  <!-- Fixed preset footer -->
+  <div class="preset-footer">
+    <span class="preset-footer-label">Preset</span>
+    <select id="preset-select" aria-label="Select preset"></select>
+  </div>
+
+</div>
+
+<!-- Shared JS (referenced from parent project) -->
+<script src="../../js/core/utils.js"></script>
+<script src="../../js/core/events.js"></script>
+<script src="../../js/components/Slider.js"></script>
+<script src="../../js/components/Dropdown.js"></script>
+<script src="../../js/components/Toggle.js"></script>
+<script src="../../js/components/ColorPicker.js"></script>
+<script src="../../js/components/Tooltip.js"></script>
+<script src="../../js/factory-presets.js"></script>
+<script src="../../js/plugins/colorlab/ui.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Bridge → Electron IPC ─────────────────────────────────
+  window.Bridge = {
+    call: function (action, params) {
+      if (action === 'colorlab.apply') {
+        return window.electronAPI.apply(params);
+      }
+      return Promise.resolve({});
+    },
+    getAEVersion: function () { return Promise.resolve(''); }
+  };
+
+  // ── Init UI ───────────────────────────────────────────────
+  var container = document.getElementById('controls');
+  ColorLabUI.init(container);
+
+  if (window.Tooltip) Tooltip.init();
+
+  // ── Reset All ─────────────────────────────────────────────
+  document.getElementById('btn-reset-all').addEventListener('click', function () {
+    ColorLabUI.applyPreset({
+      look: 'none', lookIntensity: 100,
+      exposure: 0, temperature: 0, colorTint: 0,
+      liftX: 0, liftY: 0, liftLuma: 0,
+      gammaX: 0, gammaY: 0, gammaLuma: 0,
+      gainX: 0, gainY: 0, gainLuma: 0,
+      hue: 0, saturation: 0, lightness: 0, brightness: 0, contrast: 0,
+      hslEnable: false, hslChannel: 'reds', hslHueAdj: 0, hslSatAdj: 0, hslLumAdj: 0,
+      skinProtect: false, skinProtectAmt: 50,
+      tintAmount: 0, tintBlack: '#000000', tintWhite: '#ffffff',
+      grainAmount: 0, grainColor: false,
+      vignetteAmount: 0, vignetteMidpoint: 50
+    });
+  });
+
+  // ── Preset selector ───────────────────────────────────────
+  var PRESETS = (window.FactoryPresets && window.FactoryPresets.colorlab) || {};
+  var sel = document.getElementById('preset-select');
+  sel.innerHTML = '<option value="">— Load Preset —</option>' +
+    Object.keys(PRESETS).map(function (n) {
+      return '<option value="' + n + '">' + n + '</option>';
+    }).join('');
+
+  sel.addEventListener('change', function () {
+    var name = sel.value;
+    if (name && PRESETS[name]) {
+      ColorLabUI.applyPreset(PRESETS[name]);
+      sel.value = '';
+    }
+  });
+
+  // ── Window controls ───────────────────────────────────────
+  document.getElementById('btn-min').addEventListener('click', function () {
+    window.electronAPI.minimize();
+  });
+  document.getElementById('btn-cls').addEventListener('click', function () {
+    window.electronAPI.close();
+  });
+
+  // ── AE connection polling ─────────────────────────────────
+  var aeDot  = document.getElementById('ae-dot');
+  var aeText = document.getElementById('ae-text');
+
+  function pollAE() {
+    window.electronAPI.checkAE().then(function (s) {
+      if (s && s.running) {
+        aeDot.className = 'ae-dot connected';
+        aeText.textContent = 'AE ' + (s.version ? s.version.split('.')[0] : 'Connected');
+      } else {
+        aeDot.className = 'ae-dot disconnected';
+        aeText.textContent = 'AE Not Found';
+      }
+    }).catch(function () {
+      aeDot.className = 'ae-dot disconnected';
+      aeText.textContent = 'AE Not Found';
+    });
+  }
+
+  pollAE();
+  setInterval(pollAE, 10000);
+
+})();
+</script>
+</body>
+</html>

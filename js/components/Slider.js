@@ -19,6 +19,15 @@ Slider.prototype._fillTrack = function(track) {
   track.style.setProperty('--track-fill', pct + '%');
 };
 
+Slider.prototype._updateModified = function(v) {
+  if (this.defaultValue === undefined) return;
+  if (v !== this.defaultValue) {
+    this.el.setAttribute('data-modified', '');
+  } else {
+    this.el.removeAttribute('data-modified');
+  }
+};
+
 Slider.prototype._build = function() {
   var self  = this;
   var wrap  = Utils.el('div', { class: 'component-slider' });
@@ -71,6 +80,7 @@ Slider.prototype._build = function() {
     input.value = Utils.round(v, self.decimals);
     self.value  = v;
     self._fillTrack(track);
+    self._updateModified(v);
     debounced(v);
   });
 
@@ -81,6 +91,7 @@ Slider.prototype._build = function() {
     track.value = v;
     self.value  = v;
     self._fillTrack(track);
+    self._updateModified(v);
     self.onChange(v);
   });
 
@@ -95,6 +106,7 @@ Slider.prototype.setValue = function(val) {
   this._track.value = v;
   this._input.value = Utils.round(v, this.decimals);
   this._fillTrack(this._track);
+  this._updateModified(v);
 };
 
 Slider.prototype.setEnabled = function(enabled) {

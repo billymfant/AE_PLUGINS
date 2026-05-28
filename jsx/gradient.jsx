@@ -22,7 +22,7 @@ var GradientStudio = (function () {
   // ── Linear / Radial ─────────────────────────────────────────
   function _rampGradient(comp, w, h, params) {
     var solid = comp.layers.addSolid(
-      [0, 0, 0, 1], 'Gradient — ' + params.gradientType, w, h, comp.pixelAspect
+      [0, 0, 0], 'Gradient — ' + params.gradientType, w, h, comp.pixelAspect
     );
     solid.moveToBeginning();
 
@@ -104,7 +104,7 @@ var GradientStudio = (function () {
     container.name = 'Gradient — Mesh';
     container.moveToBeginning();
 
-    var bg = comp.layers.addSolid([0, 0, 0, 1], 'Mesh BG', w, h, comp.pixelAspect);
+    var bg = comp.layers.addSolid([0, 0, 0], 'Mesh BG', w, h, comp.pixelAspect);
     bg.parent = container;
 
     for (var i = 0; i < stops.length; i++) {
@@ -112,7 +112,7 @@ var GradientStudio = (function () {
       var rgb  = _hex(stop.color);
       var sz   = Math.round(Math.min(w, h) * 0.6);
 
-      var solid = comp.layers.addSolid([rgb[0], rgb[1], rgb[2], 1], 'Stop ' + (i + 1), sz, sz, comp.pixelAspect);
+      var solid = comp.layers.addSolid([rgb[0], rgb[1], rgb[2]], 'Stop ' + (i + 1), sz, sz, comp.pixelAspect);
       solid.position.setValue([w * (stop.x / 100), h * (stop.y / 100)]);
       solid.blendingMode = BlendingMode.ADD;
       solid.parent = container;
@@ -126,7 +126,7 @@ var GradientStudio = (function () {
 
   // ── Noise ────────────────────────────────────────────────────
   function _noiseGradient(comp, w, h, params) {
-    var solid = comp.layers.addSolid([0, 0, 0, 1], 'Gradient — Noise', w, h, comp.pixelAspect);
+    var solid = comp.layers.addSolid([0, 0, 0], 'Gradient — Noise', w, h, comp.pixelAspect);
     solid.moveToBeginning();
     var fx = solid.property('ADBE Effect Parade');
 

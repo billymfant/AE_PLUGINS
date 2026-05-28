@@ -22,6 +22,9 @@ build/
 *.swp
 *.swo
 
+# Claude Code internals
+.claude/
+
 # Secrets / local config
 .env
 *.local

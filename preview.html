@@ -31,7 +31,7 @@
 
     <!-- Tab Strip -->
     <div class="tab-strip" role="tablist">
-      <button class="tab-btn active" data-tab="slides" id="tab-slides">
+      <button class="tab-btn" data-tab="slides" id="tab-slides">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
           <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="0.8"/>
           <rect x="9"   y="1.5" width="5.5" height="5.5" rx="0.8"/>
@@ -79,7 +79,7 @@
         </svg>
         Dist
       </button>
-      <button class="tab-btn" data-tab="colorlab">
+      <button class="tab-btn active" data-tab="colorlab">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
           <circle cx="8" cy="8" r="5.5"/>
           <path d="M8 2.5 L8 8 L12.5 5.5"/>
@@ -129,7 +129,7 @@
     </div>
 
     <!-- Panes -->
-    <div class="tab-pane active" id="pane-slides">
+    <div class="tab-pane" id="pane-slides">
       <div class="pane-scroll" id="controls-slides"></div>
       <div id="preset-slides"></div>
     </div>
@@ -149,7 +149,7 @@
       <div class="pane-scroll" id="controls-dist"></div>
       <div id="preset-dist"></div>
     </div>
-    <div class="tab-pane" id="pane-colorlab">
+    <div class="tab-pane active" id="pane-colorlab">
       <div class="pane-scroll" id="controls-colorlab"></div>
       <div id="preset-colorlab"></div>
     </div>
@@ -197,9 +197,18 @@ var Presets = {
   'delete': function() { return Promise.resolve(); }
 };
 var Bridge = {
-  call: function() {
-    return new Promise(function(res) { setTimeout(function() { res({ count: 3 }); }, 600); });
-  }
+  call: function(action) {
+    return new Promise(function(res) {
+      setTimeout(function() {
+        if (action === 'colorlab.apply') {
+          res({ layer: 'Color Lab', effects: 8 });
+        } else {
+          res({ count: 3 });
+        }
+      }, 600);
+    });
+  },
+  getAEVersion: function() { return Promise.resolve('25.0'); }
 };
 </script>
 
@@ -392,6 +401,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 <script src="js/plugins/particles/ui.js"></script>
 
 <script>
+if (window.Tooltip) Tooltip.init();
+
 /* ── Wire up new plugin panes ──────────────────────────────── */
 (function() {
   var pluginMap = {
