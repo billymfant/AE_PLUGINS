@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark">
+  <title>AE Plugin Suite</title>
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Tab Strip ───────────────────────────────────────── -->
+  <div class="tab-strip" role="tablist">
+
+    <button class="tab-btn active" data-tab="slides"
+            role="tab" aria-selected="true" title="Slides Generator">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="0.8"/>
+        <rect x="9"   y="1.5" width="5.5" height="5.5" rx="0.8"/>
+        <rect x="1.5" y="9"   width="5.5" height="5.5" rx="0.8"/>
+        <rect x="9"   y="9"   width="5.5" height="5.5" rx="0.8"/>
+      </svg>
+      Slides
+    </button>
+
+    <button class="tab-btn" data-tab="grids"
+            role="tab" aria-selected="false" title="Grids Pro">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <line x1="5.5" y1="1" x2="5.5" y2="15"/>
+        <line x1="10.5" y1="1" x2="10.5" y2="15"/>
+        <line x1="1" y1="5.5"  x2="15" y2="5.5"/>
+        <line x1="1" y1="10.5" x2="15" y2="10.5"/>
+      </svg>
+      Grids
+    </button>
+
+    <button class="tab-btn" data-tab="glow"
+            role="tab" aria-selected="false" title="Deep Glow">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <circle cx="8" cy="8" r="2.4"/>
+        <line x1="8" y1="1"  x2="8" y2="3.2"/>
+        <line x1="8" y1="12.8" x2="8" y2="15"/>
+        <line x1="1"  y1="8" x2="3.2" y2="8"/>
+        <line x1="12.8" y1="8" x2="15" y2="8"/>
+        <line x1="3.1" y1="3.1" x2="4.7" y2="4.7"/>
+        <line x1="11.3" y1="11.3" x2="12.9" y2="12.9"/>
+        <line x1="12.9" y1="3.1" x2="11.3" y2="4.7"/>
+        <line x1="4.7" y1="11.3" x2="3.1" y2="12.9"/>
+      </svg>
+      Glow
+    </button>
+
+    <button class="tab-btn" data-tab="sorter"
+            role="tab" aria-selected="false" title="Pixel Sorter">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <line x1="2" y1="4"  x2="14" y2="4"/>
+        <line x1="2" y1="8"  x2="10" y2="8"/>
+        <line x1="2" y1="12" x2="7"  y2="12"/>
+        <polyline points="12,6 14,8 12,10"/>
+      </svg>
+      Sort
+    </button>
+
+    <button class="tab-btn" data-tab="dist"
+            role="tab" aria-selected="false" title="Distortions Suite">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M1,5 C3,2 5,8 8,5 C11,2 13,8 15,5"/>
+        <path d="M1,11 C3,8 5,14 8,11 C11,8 13,14 15,11"/>
+      </svg>
+      Dist
+    </button>
+
+    <button class="tab-btn" data-tab="colorlab"
+            role="tab" aria-selected="false" title="Color Lab">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <circle cx="8" cy="8" r="5.5"/>
+        <path d="M8 2.5 L8 8 L12.5 5.5"/>
+        <path d="M8 8 L3.5 10.5"/>
+        <path d="M8 8 L8 13.5"/>
+      </svg>
+      Color
+    </button>
+
+    <button class="tab-btn" data-tab="gradient"
+            role="tab" aria-selected="false" title="Gradient Studio">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <rect x="1.5" y="4" width="13" height="8" rx="1"/>
+        <line x1="5" y1="4" x2="5" y2="12" stroke-opacity="0.5"/>
+        <line x1="8.5" y1="4" x2="8.5" y2="12" stroke-opacity="0.7"/>
+        <line x1="12" y1="4" x2="12" y2="12" stroke-opacity="0.4"/>
+      </svg>
+      Grad
+    </button>
+
+    <button class="tab-btn" data-tab="patterns"
+            role="tab" aria-selected="false" title="Pattern Pro">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M8 1 L8 15"/>
+        <path d="M1 8 L15 8"/>
+        <path d="M3 3 L13 13"/>
+        <path d="M13 3 L3 13"/>
+      </svg>
+      Patt
+    </button>
+
+    <button class="tab-btn" data-tab="physics"
+            role="tab" aria-selected="false" title="Physics Rig">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <circle cx="5" cy="4" r="2"/>
+        <circle cx="11" cy="4" r="2"/>
+        <path d="M5 6 Q5 11 8 13 Q11 11 11 6"/>
+        <line x1="5" y1="4" x2="11" y2="4"/>
+      </svg>
+      Phys
+    </button>
+
+    <button class="tab-btn" data-tab="particles"
+            role="tab" aria-selected="false" title="Particle Engine">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+        <circle cx="8" cy="13" r="1.2" fill="currentColor"/>
+        <circle cx="4" cy="9"  r="0.9" fill="currentColor" opacity="0.8"/>
+        <circle cx="12" cy="9"  r="0.9" fill="currentColor" opacity="0.8"/>
+        <circle cx="3"  cy="5"  r="0.7" fill="currentColor" opacity="0.6"/>
+        <circle cx="8"  cy="4"  r="0.7" fill="currentColor" opacity="0.6"/>
+        <circle cx="13" cy="5"  r="0.7" fill="currentColor" opacity="0.6"/>
+      </svg>
+      Parts
+    </button>
+
+  </div>
+
+  <!-- ── Tab Panes ───────────────────────────────────────── -->
+
+  <div class="tab-pane active" id="pane-slides" role="tabpanel">
+    <div class="pane-scroll" id="controls-slides"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-grids" role="tabpanel">
+    <div class="pane-scroll" id="controls-grids"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-glow" role="tabpanel">
+    <div class="pane-scroll" id="controls-glow"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-sorter" role="tabpanel">
+    <div class="pane-scroll" id="controls-sorter"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-dist" role="tabpanel">
+    <div class="pane-scroll" id="controls-dist"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-colorlab" role="tabpanel">
+    <div class="pane-scroll" id="controls-colorlab"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-gradient" role="tabpanel">
+    <div class="pane-scroll" id="controls-gradient"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-patterns" role="tabpanel">
+    <div class="pane-scroll" id="controls-patterns"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-physics" role="tabpanel">
+    <div class="pane-scroll" id="controls-physics"></div>
+  </div>
+
+  <div class="tab-pane" id="pane-particles" role="tabpanel">
+    <div class="pane-scroll" id="controls-particles"></div>
+  </div>
+
+</div>
+
+<!-- ── Scripts (load order matters) ───────────────────────── -->
+
+<!-- Adobe CEP bridge — replace lib/CSInterface.js with the real file from   -->
+<!-- https://github.com/Adobe-CEP/CEP-Resources before deploying to AE.     -->
+<script src="lib/CSInterface.js"></script>
+
+<!-- Core utilities -->
+<script src="js/core/utils.js"></script>
+<script src="js/core/events.js"></script>
+<script src="js/core/bridge.js"></script>
+<script src="js/core/presets.js"></script>
+
+<!-- UI components -->
+<script src="js/components/Slider.js"></script>
+<script src="js/components/Dropdown.js"></script>
+<script src="js/components/ButtonGroup.js"></script>
+<script src="js/components/Toggle.js"></script>
+<script src="js/components/ColorPicker.js"></script>
+<script src="js/components/PresetBar.js"></script>
+
+<!-- Tooltip system -->
+<script src="js/components/Tooltip.js"></script>
+
+<!-- Plugin UIs -->
+<script src="js/plugins/slides/ui.js"></script>
+<script src="js/plugins/grids/ui.js"></script>
+<script src="js/plugins/glow/ui.js"></script>
+<script src="js/plugins/sorter/ui.js"></script>
+<script src="js/plugins/distortions/ui.js"></script>
+<script src="js/plugins/colorlab/ui.js"></script>
+<script src="js/plugins/gradient/ui.js"></script>
+<script src="js/plugins/patterns/ui.js"></script>
+<script src="js/plugins/physics/ui.js"></script>
+<script src="js/plugins/particles/ui.js"></script>
+
+<!-- Built-in preset library -->
+<script src="js/factory-presets.js"></script>
+
+<!-- App bootstrap -->
+<script src="js/app.js"></script>
+
+</body>
+</html>

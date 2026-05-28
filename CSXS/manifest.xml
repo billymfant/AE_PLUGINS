@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ExtensionManifest Version="7.0"
+  ExtensionBundleId="com.aeplugins.suite"
+  ExtensionBundleVersion="1.0.0"
+  ExtensionBundleName="AE Plugin Suite">
+  <ExtensionList>
+    <Extension Id="com.aeplugins.suite.panel" Version="1.0.0"/>
+  </ExtensionList>
+  <ExecutionEnvironment>
+    <HostList>
+      <Host Name="AEFT" Version="[16.0,99.9]"/>
+    </HostList>
+    <LocaleList>
+      <Locale Code="All"/>
+    </LocaleList>
+    <RequiredRuntimeList>
+      <RequiredRuntime Name="CSXS" Version="9.0"/>
+    </RequiredRuntimeList>
+  </ExecutionEnvironment>
+  <DispatchInfoList>
+    <Extension Id="com.aeplugins.suite.panel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./index.html</MainPath>
+          <ScriptPath>./jsx/dispatcher.jsx</ScriptPath>
+          <CEFCommandLine/>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>AE Plugin Suite</Menu>
+          <Geometry>
+            <Size>
+              <Height>620</Height>
+              <Width>320</Width>
+            </Size>
+            <MinSize>
+              <Height>420</Height>
+              <Width>280</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>1200</Height>
+              <Width>600</Width>
+            </MaxSize>
+          </Geometry>
+        </UI>
+      </DispatchInfo>
+    </Extension>
+  </DispatchInfoList>
+</ExtensionManifest>

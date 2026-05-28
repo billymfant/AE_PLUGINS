@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="dark">
+  <title>AE Plugin Suite — Preview</title>
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <style>
+    /* Preview chrome: simulate the AE panel host window */
+    body { display: flex; justify-content: center; align-items: flex-start; padding: 40px; background: #0a0a0a; min-height: 100vh; overflow: auto; }
+    .panel-frame {
+      width: 300px;
+      height: 600px;
+      border: 1px solid #3d3d3d;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.7);
+    }
+    /* override html/body overflow:hidden for preview */
+    html, body { overflow: auto; height: auto; }
+    #app { height: 600px; }
+  </style>
+</head>
+<body>
+<div class="panel-frame">
+  <div id="app">
+
+    <!-- Tab Strip -->
+    <div class="tab-strip" role="tablist">
+      <button class="tab-btn active" data-tab="slides" id="tab-slides">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="0.8"/>
+          <rect x="9"   y="1.5" width="5.5" height="5.5" rx="0.8"/>
+          <rect x="1.5" y="9"   width="5.5" height="5.5" rx="0.8"/>
+          <rect x="9"   y="9"   width="5.5" height="5.5" rx="0.8"/>
+        </svg>
+        Slides
+      </button>
+      <button class="tab-btn" data-tab="grids" id="tab-grids">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <line x1="5.5" y1="1" x2="5.5" y2="15"/>
+          <line x1="10.5" y1="1" x2="10.5" y2="15"/>
+          <line x1="1" y1="5.5"  x2="15" y2="5.5"/>
+          <line x1="1" y1="10.5" x2="15" y2="10.5"/>
+        </svg>
+        Grids
+      </button>
+      <button class="tab-btn" data-tab="glow" id="tab-glow">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="8" cy="8" r="2.4"/>
+          <line x1="8" y1="1"  x2="8" y2="3.2"/>
+          <line x1="8" y1="12.8" x2="8" y2="15"/>
+          <line x1="1"  y1="8" x2="3.2" y2="8"/>
+          <line x1="12.8" y1="8" x2="15" y2="8"/>
+          <line x1="3.1" y1="3.1" x2="4.7" y2="4.7"/>
+          <line x1="11.3" y1="11.3" x2="12.9" y2="12.9"/>
+          <line x1="12.9" y1="3.1" x2="11.3" y2="4.7"/>
+          <line x1="4.7" y1="11.3" x2="3.1" y2="12.9"/>
+        </svg>
+        Glow
+      </button>
+      <button class="tab-btn" data-tab="sorter" id="tab-sorter">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <line x1="2" y1="4"  x2="14" y2="4"/>
+          <line x1="2" y1="8"  x2="10" y2="8"/>
+          <line x1="2" y1="12" x2="7"  y2="12"/>
+          <polyline points="12,6 14,8 12,10"/>
+        </svg>
+        Sort
+      </button>
+      <button class="tab-btn" data-tab="dist" id="tab-dist">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M1,5 C3,2 5,8 8,5 C11,2 13,8 15,5"/>
+          <path d="M1,11 C3,8 5,14 8,11 C11,8 13,14 15,11"/>
+        </svg>
+        Dist
+      </button>
+      <button class="tab-btn" data-tab="colorlab">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="8" cy="8" r="5.5"/>
+          <path d="M8 2.5 L8 8 L12.5 5.5"/>
+          <path d="M8 8 L3.5 10.5"/>
+          <path d="M8 8 L8 13.5"/>
+        </svg>
+        Color
+      </button>
+      <button class="tab-btn" data-tab="gradient">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="1.5" y="4" width="13" height="8" rx="1"/>
+          <line x1="5" y1="4" x2="5" y2="12" stroke-opacity="0.5"/>
+          <line x1="8.5" y1="4" x2="8.5" y2="12" stroke-opacity="0.7"/>
+          <line x1="12" y1="4" x2="12" y2="12" stroke-opacity="0.4"/>
+        </svg>
+        Grad
+      </button>
+      <button class="tab-btn" data-tab="patterns">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M8 1 L8 15"/>
+          <path d="M1 8 L15 8"/>
+          <path d="M3 3 L13 13"/>
+          <path d="M13 3 L3 13"/>
+        </svg>
+        Patt
+      </button>
+      <button class="tab-btn" data-tab="physics">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="5" cy="4" r="2"/>
+          <circle cx="11" cy="4" r="2"/>
+          <path d="M5 6 Q5 11 8 13 Q11 11 11 6"/>
+          <line x1="5" y1="4" x2="11" y2="4"/>
+        </svg>
+        Phys
+      </button>
+      <button class="tab-btn" data-tab="particles">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="8" cy="13" r="1.2" fill="currentColor"/>
+          <circle cx="4" cy="9"  r="0.9" fill="currentColor" opacity="0.8"/>
+          <circle cx="12" cy="9"  r="0.9" fill="currentColor" opacity="0.8"/>
+          <circle cx="3"  cy="5"  r="0.7" fill="currentColor" opacity="0.6"/>
+          <circle cx="8"  cy="4"  r="0.7" fill="currentColor" opacity="0.6"/>
+          <circle cx="13" cy="5"  r="0.7" fill="currentColor" opacity="0.6"/>
+        </svg>
+        Parts
+      </button>
+    </div>
+
+    <!-- Panes -->
+    <div class="tab-pane active" id="pane-slides">
+      <div class="pane-scroll" id="controls-slides"></div>
+      <div id="preset-slides"></div>
+    </div>
+    <div class="tab-pane" id="pane-grids">
+      <div class="pane-scroll" id="controls-grids"></div>
+      <div id="preset-grids"></div>
+    </div>
+    <div class="tab-pane" id="pane-glow">
+      <div class="pane-scroll" id="controls-glow"></div>
+      <div id="preset-glow"></div>
+    </div>
+    <div class="tab-pane" id="pane-sorter">
+      <div class="pane-scroll" id="controls-sorter"></div>
+      <div id="preset-sorter"></div>
+    </div>
+    <div class="tab-pane" id="pane-dist">
+      <div class="pane-scroll" id="controls-dist"></div>
+      <div id="preset-dist"></div>
+    </div>
+    <div class="tab-pane" id="pane-colorlab">
+      <div class="pane-scroll" id="controls-colorlab"></div>
+      <div id="preset-colorlab"></div>
+    </div>
+    <div class="tab-pane" id="pane-gradient">
+      <div class="pane-scroll" id="controls-gradient"></div>
+      <div id="preset-gradient"></div>
+    </div>
+    <div class="tab-pane" id="pane-patterns">
+      <div class="pane-scroll" id="controls-patterns"></div>
+      <div id="preset-patterns"></div>
+    </div>
+    <div class="tab-pane" id="pane-physics">
+      <div class="pane-scroll" id="controls-physics"></div>
+      <div id="preset-physics"></div>
+    </div>
+    <div class="tab-pane" id="pane-particles">
+      <div class="pane-scroll" id="controls-particles"></div>
+      <div id="preset-particles"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ── Minimal stubs for preview ─────────────────────────────── */
+var Utils = {
+  el: function(tag, attrs, text) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function(k) { el.setAttribute(k, attrs[k]); });
+    if (text !== undefined) el.textContent = text;
+    return el;
+  },
+  debounce: function(fn, ms) {
+    var t; return function() { var a = arguments; clearTimeout(t); t = setTimeout(function() { fn.apply(null, a); }, ms); };
+  },
+  clamp: function(v, mn, mx) { return Math.min(Math.max(v, mn), mx); },
+  round: function(v, d) { return parseFloat(v.toFixed(d)); },
+  deepClone: function(o) { return JSON.parse(JSON.stringify(o)); }
+};
+var Presets = {
+  list: function() { return Promise.resolve({ presets: ['Default', 'Soft Bloom', 'Neon Edge', 'Cinematic', 'Subtle Glow'], userPresets: ['My Preset'] }); },
+  get: function() { return Promise.resolve({}); },
+  save: function() { return Promise.resolve(); },
+  isFactory: function(pid, name) { return ['Default','Soft Bloom','Neon Edge','Cinematic','Subtle Glow'].indexOf(name) >= 0; },
+  'delete': function() { return Promise.resolve(); }
+};
+var Bridge = {
+  call: function() {
+    return new Promise(function(res) { setTimeout(function() { res({ count: 3 }); }, 600); });
+  }
+};
+</script>
+
+<!-- Components -->
+<script src="js/components/Slider.js"></script>
+<script src="js/components/Dropdown.js"></script>
+<script src="js/components/ButtonGroup.js"></script>
+<script src="js/components/Toggle.js"></script>
+<script src="js/components/ColorPicker.js"></script>
+<script src="js/components/PresetBar.js"></script>
+<script src="js/components/Tooltip.js"></script>
+
+<script>
+/* ── Tab switching ─────────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById('pane-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ── Build Slides pane ─────────────────────────────────────── */
+(function() {
+  var c = document.getElementById('controls-slides');
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Grid'));
+  var gridRow = Utils.el('div', { class: 'row-2' });
+  gridRow.appendChild(new Slider({ label: 'Rows', min: 1, max: 20, value: 3, step: 1, defaultValue: 3, tooltip: 'Number of rows in the slide grid', onChange: function(){} }).el);
+  gridRow.appendChild(new Slider({ label: 'Cols', min: 1, max: 20, value: 3, step: 1, defaultValue: 3, tooltip: 'Number of columns', onChange: function(){} }).el);
+  c.appendChild(gridRow);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Slide Size'));
+  var sizeRow = Utils.el('div', { class: 'row-2' });
+  sizeRow.appendChild(new Slider({ label: 'Width px', min: 20, max: 1920, value: 200, step: 1, defaultValue: 200, onChange: function(){} }).el);
+  sizeRow.appendChild(new Slider({ label: 'Height px', min: 20, max: 1080, value: 150, step: 1, defaultValue: 150, onChange: function(){} }).el);
+  c.appendChild(sizeRow);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Spacing'));
+  var gapRow = Utils.el('div', { class: 'row-2' });
+  gapRow.appendChild(new Slider({ label: 'Gap H', min: 0, max: 200, value: 10, step: 1, defaultValue: 10, onChange: function(){} }).el);
+  gapRow.appendChild(new Slider({ label: 'Gap V', min: 0, max: 200, value: 10, step: 1, defaultValue: 10, onChange: function(){} }).el);
+  c.appendChild(gapRow);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Randomization'));
+  c.appendChild(new Slider({ label: 'Position Jitter %', min: 0, max: 100, value: 0, step: 1, defaultValue: 0, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Rotation °', min: 0, max: 180, value: 0, step: 1, defaultValue: 0, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Scale Jitter %', min: 0, max: 50, value: 0, step: 1, defaultValue: 0, onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Animation'));
+  c.appendChild(new Dropdown({ label: 'Entrance Type', options: [{value:'none',label:'None'},{value:'fade',label:'Fade In'},{value:'scale',label:'Scale In'},{value:'slideUp',label:'Slide Up'}], value: 'none', onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Stagger (frames)', min: 0, max: 60, value: 5, step: 1, defaultValue: 5, onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Options'));
+  c.appendChild(new Toggle({ label: 'Auto-create text layers', value: false, onChange: function(){} }).el);
+
+  var btn = Utils.el('button', { class: 'action-btn' }, 'Generate Slides');
+  btn.addEventListener('click', function() {
+    btn.disabled = true; btn.textContent = 'Generating…';
+    setTimeout(function() { btn.disabled = false; btn.textContent = 'Generate Slides'; status.className = 'status-bar success'; status.textContent = 'Generated 9 slides.'; }, 800);
+  });
+  c.appendChild(btn);
+  var status = Utils.el('div', { class: 'status-bar' }, '');
+  c.appendChild(status);
+
+  document.getElementById('preset-slides').appendChild(new PresetBar({ pluginId: 'slides', onLoad: function(){}, getParams: function(){ return {}; } }).el);
+})();
+
+/* ── Build Grids pane ──────────────────────────────────────── */
+(function() {
+  var c = document.getElementById('controls-grids');
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Pattern'));
+  c.appendChild(new ButtonGroup({ label: 'Grid Type', options: [{value:'rect',label:'Rect'},{value:'hex',label:'Hex'},{value:'tri',label:'Tri'},{value:'radial',label:'Radial'}], value: 'rect', onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Dimensions'));
+  var dimRow = Utils.el('div', { class: 'row-2' });
+  dimRow.appendChild(new Slider({ label: 'Columns', min: 1, max: 50, value: 8, step: 1, defaultValue: 8, onChange: function(){} }).el);
+  dimRow.appendChild(new Slider({ label: 'Rows', min: 1, max: 50, value: 8, step: 1, defaultValue: 8, onChange: function(){} }).el);
+  c.appendChild(dimRow);
+  c.appendChild(new Slider({ label: 'Cell Size px', min: 4, max: 300, value: 40, step: 1, defaultValue: 40, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Gap px', min: 0, max: 50, value: 2, step: 1, defaultValue: 2, onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Stroke'));
+  c.appendChild(new Slider({ label: 'Stroke Width', min: 0, max: 20, value: 1, step: 0.5, decimals: 1, defaultValue: 1, onChange: function(){} }).el);
+  c.appendChild(new ColorPicker({ label: 'Stroke Color', value: '#4d9fff', onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Animation'));
+  c.appendChild(new ButtonGroup({ label: 'Entrance', options: [{value:'none',label:'None'},{value:'draw',label:'Draw'},{value:'fade',label:'Fade'},{value:'scale',label:'Scale'}], value: 'draw', onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Stagger (frames)', min: 0, max: 30, value: 2, step: 1, defaultValue: 2, onChange: function(){} }).el);
+
+  var btn = Utils.el('button', { class: 'action-btn' }, 'Generate Grid');
+  c.appendChild(btn);
+  c.appendChild(Utils.el('div', { class: 'status-bar' }, ''));
+  document.getElementById('preset-grids').appendChild(new PresetBar({ pluginId: 'grids', onLoad: function(){}, getParams: function(){ return {}; } }).el);
+})();
+
+/* ── Build Glow pane ───────────────────────────────────────── */
+(function() {
+  var c = document.getElementById('controls-glow');
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Glow'));
+  c.appendChild(new Slider({ label: 'Intensity %', min: 0, max: 500, value: 150, step: 1, defaultValue: 150, tooltip: 'Overall glow brightness multiplier across all passes', onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Radius px', min: 0, max: 500, value: 60, step: 1, defaultValue: 60, tooltip: 'Blur radius of the glow spread', onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Glow Layers', min: 1, max: 5, value: 2, step: 1, defaultValue: 2, tooltip: 'Number of stacked glow passes', onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Falloff'));
+  c.appendChild(new ButtonGroup({ tooltip: 'How intensity decreases across passes', options: [{value:'linear',label:'Linear'},{value:'soft',label:'Soft'},{value:'exponential',label:'Exp'}], value: 'soft', onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Threshold (0–255)', min: 0, max: 255, value: 80, step: 1, defaultValue: 80, onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Color'));
+  c.appendChild(new ColorPicker({ label: 'Glow Color', value: '#fbbf24', onChange: function(){} }).el);
+  c.appendChild(new Toggle({ label: 'Colorize glow', value: true, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Saturation Boost', min: -100, max: 100, value: 20, step: 1, defaultValue: 0, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Hue Shift °', min: -180, max: 180, value: 0, step: 1, defaultValue: 0, onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Output'));
+  c.appendChild(new Dropdown({ label: 'Blend Mode', options: [{value:'screen',label:'Screen'},{value:'add',label:'Add'},{value:'overlay',label:'Overlay'},{value:'lighten',label:'Lighten'}], value: 'screen', onChange: function(){} }).el);
+  c.appendChild(new ButtonGroup({ tooltip: 'Render quality', options: [{value:'fast',label:'Fast'},{value:'quality',label:'Quality'}], value: 'quality', onChange: function(){} }).el);
+
+  var btn = Utils.el('button', { class: 'action-btn' }, 'Apply Glow');
+  var status = Utils.el('div', { class: 'status-bar' }, '');
+  btn.addEventListener('click', function() {
+    btn.disabled = true; btn.textContent = 'Applying…';
+    setTimeout(function() { btn.disabled = false; btn.textContent = 'Apply Glow'; status.className = 'status-bar success'; status.textContent = 'Glow applied to 2 layer(s).'; }, 700);
+  });
+  c.appendChild(btn);
+  c.appendChild(status);
+  document.getElementById('preset-glow').appendChild(new PresetBar({ pluginId: 'glow', onLoad: function(){}, getParams: function(){ return {}; } }).el);
+})();
+
+/* ── Build Sorter pane ─────────────────────────────────────── */
+(function() {
+  var c = document.getElementById('controls-sorter');
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Sort'));
+  c.appendChild(new ButtonGroup({ label: 'Direction', options: [{value:'horizontal',label:'H'},{value:'vertical',label:'V'},{value:'both',label:'Both'}], value: 'horizontal', onChange: function(){} }).el);
+  c.appendChild(new ButtonGroup({ label: 'Sort By', options: [{value:'brightness',label:'Bright'},{value:'hue',label:'Hue'},{value:'saturation',label:'Sat'}], value: 'brightness', onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Mask'));
+  c.appendChild(new Slider({ label: 'Threshold Low', min: 0, max: 255, value: 30, step: 1, defaultValue: 30, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Threshold High', min: 0, max: 255, value: 220, step: 1, defaultValue: 220, onChange: function(){} }).el);
+  c.appendChild(new Toggle({ label: 'Invert mask', value: false, onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Effect'));
+  c.appendChild(new Slider({ label: 'Intensity %', min: 0, max: 100, value: 75, step: 1, defaultValue: 75, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Displacement', min: 0, max: 200, value: 40, step: 1, defaultValue: 40, onChange: function(){} }).el);
+
+  var btn = Utils.el('button', { class: 'action-btn' }, 'Apply Sort');
+  c.appendChild(btn);
+  c.appendChild(Utils.el('div', { class: 'status-bar' }, ''));
+  document.getElementById('preset-sorter').appendChild(new PresetBar({ pluginId: 'sorter', onLoad: function(){}, getParams: function(){ return {}; } }).el);
+})();
+
+/* ── Stubs for new plugins ─────────────────────────────────── */
+/* Bridge stub already returns { count:3 } for any call. */
+
+/* ── Build Dist pane ───────────────────────────────────────── */
+(function() {
+  var c = document.getElementById('controls-dist');
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Type'));
+  c.appendChild(new ButtonGroup({ options: [{value:'lens',label:'Lens'},{value:'warp',label:'Warp'},{value:'swirl',label:'Swirl'},{value:'wave',label:'Wave'},{value:'bulge',label:'Bulge'}], value: 'lens', onChange: function(){} }).el);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Parameters'));
+  c.appendChild(new Slider({ label: 'Strength', min: -200, max: 200, value: 50, step: 1, defaultValue: 50, onChange: function(){} }).el);
+  c.appendChild(new Slider({ label: 'Radius', min: 0, max: 100, value: 50, step: 1, defaultValue: 50, onChange: function(){} }).el);
+  var centerRow = Utils.el('div', { class: 'row-2' });
+  centerRow.appendChild(new Slider({ label: 'Center X %', min: 0, max: 100, value: 50, step: 1, defaultValue: 50, onChange: function(){} }).el);
+  centerRow.appendChild(new Slider({ label: 'Center Y %', min: 0, max: 100, value: 50, step: 1, defaultValue: 50, onChange: function(){} }).el);
+  c.appendChild(centerRow);
+
+  c.appendChild(Utils.el('div', { class: 'section-label' }, 'Mask'));
+  c.appendChild(new Slider({ label: 'Feather px', min: 0, max: 200, value: 0, step: 1, defaultValue: 0, onChange: function(){} }).el);
+
+  var btn = Utils.el('button', { class: 'action-btn' }, 'Apply Distortion');
+  c.appendChild(btn);
+  c.appendChild(Utils.el('div', { class: 'status-bar' }, ''));
+  document.getElementById('preset-dist').appendChild(new PresetBar({ pluginId: 'dist', onLoad: function(){}, getParams: function(){ return {}; } }).el);
+})();
+</script>
+
+<!-- New plugin UI modules (use actual modules with stub Bridge) -->
+<script src="js/factory-presets.js"></script>
+<script src="js/plugins/colorlab/ui.js"></script>
+<script src="js/plugins/gradient/ui.js"></script>
+<script src="js/plugins/patterns/ui.js"></script>
+<script src="js/plugins/physics/ui.js"></script>
+<script src="js/plugins/particles/ui.js"></script>
+
+<script>
+/* ── Wire up new plugin panes ──────────────────────────────── */
+(function() {
+  var pluginMap = {
+    colorlab:  { ui: window.ColorLabUI,  id: 'colorlab' },
+    gradient:  { ui: window.GradientUI,  id: 'gradient' },
+    patterns:  { ui: window.PatternsUI,  id: 'patterns' },
+    physics:   { ui: window.PhysicsUI,   id: 'physics' },
+    particles: { ui: window.ParticlesUI, id: 'particles' }
+  };
+
+  Object.keys(pluginMap).forEach(function(tab) {
+    var entry    = pluginMap[tab];
+    var controls = document.getElementById('controls-' + tab);
+    var presetEl = document.getElementById('preset-' + tab);
+    if (!entry.ui || !controls) return;
+
+    entry.ui.init(controls);
+
+    var bar = new PresetBar({
+      pluginId: entry.id,
+      getParams: function() { return entry.ui.getParams(); },
+      onLoad: function(p) { entry.ui.applyPreset(p); }
+    });
+    presetEl.appendChild(bar.el);
+  });
+})();
+</script>
+</body>
+</html>

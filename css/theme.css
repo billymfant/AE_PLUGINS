@@ -1,0 +1,109 @@
+:root {
+  /* ── Surfaces (deep-dark, layered) ─────────────────────── */
+  --bg:           #111111;
+  --surface:      #1a1a1a;
+  --surface-2:    #222222;
+  --surface-3:    #2c2c2c;
+  --surface-4:    #353535;
+
+  /* ── Borders ────────────────────────────────────────────── */
+  --border:       #2e2e2e;
+  --border-light: #3d3d3d;
+  --border-focus: #4d9fff;
+
+  /* ── Text ───────────────────────────────────────────────── */
+  --text:         #d4d4d4;
+  --text-muted:   #848484;
+  --text-bright:  #f0f0f0;
+  --text-dim:     #555555;
+
+  /* ── Accent — AE blue ───────────────────────────────────── */
+  --accent:       #4d9fff;
+  --accent-hover: #6aaeff;
+  --accent-dim:   rgba(77, 159, 255, 0.18);
+  --accent-glow:  rgba(77, 159, 255, 0.12);
+
+  /* ── Semantic ───────────────────────────────────────────── */
+  --success:      #4ade80;
+  --warning:      #fbbf24;
+  --danger:       #f87171;
+
+  /* ── Per-plugin tab colors ──────────────────────────────── */
+  --slides-color:     #a78bfa;
+  --grids-color:      #4d9fff;
+  --glow-color:       #fbbf24;
+  --sorter-color:     #f87171;
+  --dist-color:       #34d399;
+  --colorlab-color:   #e879f9;
+  --gradient-color:   #38bdf8;
+  --patterns-color:   #a3e635;
+  --physics-color:    #fb923c;
+  --particles-color:  #f0abfc;
+
+  /* ── Sizing & Spacing ───────────────────────────────────── */
+  --radius:     3px;
+  --radius-md:  5px;
+  --radius-pill: 99px;
+  --spacing:    8px;
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --font-size:  11px;
+  --font-ui:    'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --font-mono:  'Consolas', 'SF Mono', monospace;
+
+  /* ── Transitions ─────────────────────────────────────────── */
+  --t-fast:   0.1s ease;
+  --t-base:   0.15s ease;
+  --t-slow:   0.25s ease;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--font-size);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  touch-action: manipulation;
+}
+
+input, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color var(--t-base);
+}
+
+input:focus, select:focus {
+  border-color: var(--border-focus);
+}
+
+a { color: var(--accent); text-decoration: none; }
