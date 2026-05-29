@@ -254,12 +254,12 @@ var Grids = (function() {
 
       var defaultGridW = (params.gridWidth > 0) ? params.gridWidth : comp.width;
       var defaultGridH = (params.gridHeight > 0) ? params.gridHeight : comp.height;
-      var defaultColumns = params.columns || 3;
+      var defaultColumns = (params.columns !== undefined ? params.columns : 3);
       var defaultGapX = (params.gapX !== undefined) ? params.gapX : 24;
       var defaultGapY = (params.gapY !== undefined) ? params.gapY : 24;
       var defaultMarginX = (params.marginX !== undefined) ? params.marginX : 60;
       var defaultMarginY = (params.marginY !== undefined) ? params.marginY : 60;
-      var defaultFitMode = params.fitMode || 5;
+      var defaultFitMode = (params.fitMode !== undefined ? params.fitMode : 5);
       var defaultItemScale = (params.itemScale !== undefined) ? params.itemScale : 100;
       var defaultOffsetX = (params.offsetX !== undefined) ? params.offsetX : 0;
       var defaultOffsetY = (params.offsetY !== undefined) ? params.offsetY : 0;
@@ -268,8 +268,11 @@ var Grids = (function() {
       var defaultProgX = (params.progShiftX !== undefined) ? params.progShiftX : 0;
       var defaultProgY = (params.progShiftY !== undefined) ? params.progShiftY : 0;
 
+      var ctrlName = 'GRID_CONTROL'; var n = 2;
+      while (true) { var exists=false; try { if (comp.layer(ctrlName)) exists=true; } catch(e){ exists=false; } if(!exists) break; ctrlName='GRID_CONTROL_'+n; n++; }
+
       var ctrl = comp.layers.addNull();
-      ctrl.name = 'GRID_CONTROL';
+      ctrl.name = ctrlName;
       ctrl.moveToBeginning();
 
       _addSlider(ctrl, 'Columns',                defaultColumns);
@@ -289,12 +292,14 @@ var Grids = (function() {
       _addSlider(ctrl, 'Progressive Shift X',    defaultProgX);
       _addSlider(ctrl, 'Progressive Shift Y',    defaultProgY);
 
+      var riggedCount = 0;
+
       for (var i = 0; i < selected.length; i++) {
         var layer = selected[i];
         var idx = i;
 
         var posExpr = '' +
-          'var ctrl = thisComp.layer("GRID_CONTROL");\n' +
+          'var ctrl = thisComp.layer("' + ctrlName + '");\n' +
           'var itemIndex = ' + idx + ';\n' +
           'var cols = Math.max(1, Math.round(ctrl.effect("Columns")("Slider")));\n' +
           'var gapX = ctrl.effect("Gap X")("Slider");\n' +
@@ -311,8 +316,8 @@ var Grids = (function() {
           'var progY = ctrl.effect("Progressive Shift Y")("Slider");\n' +
           'var itemCount = Math.max(1, Math.round(ctrl.effect("Item Count")("Slider")));\n' +
           'var rows = Math.max(1, Math.ceil(itemCount / cols));\n' +
-          'var cellW = (gridW - marginX*2 - gapX*(cols-1)) / cols;\n' +
-          'var cellH = (gridH - marginY*2 - gapY*(rows-1)) / rows;\n' +
+          'var cellW = Math.max(1, (gridW - marginX*2 - gapX*(cols-1)) / cols);\n' +
+          'var cellH = Math.max(1, (gridH - marginY*2 - gapY*(rows-1)) / rows);\n' +
           'var col = itemIndex % cols;\n' +
           'var row = Math.floor(itemIndex / cols);\n' +
           'var startX = (thisComp.width - gridW)/2 + marginX + cellW/2;\n' +
@@ -325,8 +330,7 @@ var Grids = (function() {
           '[x, y];';
 
         var scaleExpr = '' +
-          'var ctrl = thisComp.layer("GRID_CONTROL");\n' +
-          'var itemIndex = ' + idx + ';\n' +
+          'var ctrl = thisComp.layer("' + ctrlName + '");\n' +
           'var fitMode = Math.round(ctrl.effect("Fit Mode")("Slider"));\n' +
           'var itemScale = ctrl.effect("Item Scale")("Slider")/100;\n' +
           'var cols = Math.max(1, Math.round(ctrl.effect("Columns")("Slider")));\n' +
@@ -338,8 +342,8 @@ var Grids = (function() {
           'var gridH = ctrl.effect("Grid Height")("Slider");\n' +
           'var itemCount = Math.max(1, Math.round(ctrl.effect("Item Count")("Slider")));\n' +
           'var rows = Math.max(1, Math.ceil(itemCount / cols));\n' +
-          'var cellW = (gridW - marginX*2 - gapX*(cols-1)) / cols;\n' +
-          'var cellH = (gridH - marginY*2 - gapY*(rows-1)) / rows;\n' +
+          'var cellW = Math.max(1, (gridW - marginX*2 - gapX*(cols-1)) / cols);\n' +
+          'var cellH = Math.max(1, (gridH - marginY*2 - gapY*(rows-1)) / rows);\n' +
           'function getLayerSize(){ try { var r = thisLayer.sourceRectAtTime(time,false); return [Math.max(1,r.width), Math.max(1,r.height)]; } catch(e){ return [Math.max(1,thisLayer.width), Math.max(1,thisLayer.height)]; } }\n' +
           'var s = getLayerSize(); var sw=s[0], sh=s[1];\n' +
           'var fitW = cellW/sw*100; var fitH = cellH/sh*100;\n' +
@@ -353,18 +357,21 @@ var Grids = (function() {
           'else { result = value; }\n' +
           'result;';
 
-        var posProp = layer.property('ADBE Position');
-        if (posProp.numKeys === 0 && posProp.expression === '') {
-          posProp.expression = posExpr;
-        }
-
-        var scaProp = layer.property('ADBE Scale');
-        if (scaProp.numKeys === 0 && scaProp.expression === '') {
-          scaProp.expression = scaleExpr;
-        }
+        try {
+          var posProp = layer.property('ADBE Position');
+          var scaProp = layer.property('ADBE Scale');
+          if (!posProp || !scaProp) { continue; }
+          if (posProp.numKeys === 0 && posProp.expression === '') {
+            posProp.expression = posExpr;
+          }
+          if (scaProp.numKeys === 0 && scaProp.expression === '') {
+            scaProp.expression = scaleExpr;
+          }
+          riggedCount++;
+        } catch(e) {}
       }
 
-      return { success: true, count: selected.length };
+      return { success: true, count: riggedCount };
     });
   }
 
