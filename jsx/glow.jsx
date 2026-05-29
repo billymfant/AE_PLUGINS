@@ -32,10 +32,21 @@ var Glow = (function() {
       var count = 0;
 
       // ── Controller creation (one per operation, shared by all selected layers) ──
+      // Fix #4: generate a unique controller name so applying twice doesn't create
+      // two nulls with the same name (thisComp.layer() would resolve ambiguously).
+      var ctrlName = 'GLOW_CONTROLLER';
+      if (useController) {
+        var ctrlSuffix = 2;
+        while (true) {
+          try { comp.layer(ctrlName); ctrlName = 'GLOW_CONTROLLER_' + ctrlSuffix; ctrlSuffix++; }
+          catch (e) { break; }
+        }
+      }
+
       var controllerLayer = null;
       if (useController) {
         controllerLayer = comp.layers.addNull();
-        controllerLayer.name = 'GLOW_CONTROLLER';
+        controllerLayer.name = ctrlName;
         controllerLayer.moveToBeginning();
 
         var fx = controllerLayer.property('ADBE Effect Parade');
@@ -65,12 +76,9 @@ var Glow = (function() {
         fxSourceGain.name = 'Source Gain';
         fxSourceGain.property('ADBE Slider Control-0001').setValue(sourceGain);
 
-        // Slider: Tint Amount
-        var fxTintAmount = fx.addProperty('ADBE Slider Control');
-        fxTintAmount.name = 'Tint Amount';
-        fxTintAmount.property('ADBE Slider Control-0001').setValue(tintAmount);
-
         // Color Control: Tint Color
+        // (Tint Amount slider removed — Fix #1: no expression reads it from the controller;
+        //  tintAmount is consumed at apply-time only, as the gate for colorize logic below.)
         var fxTintColor = fx.addProperty('ADBE Color Control');
         fxTintColor.name = 'Tint Color';
         fxTintColor.property('ADBE Color Control-0001').setValue(glowColor);
@@ -85,15 +93,20 @@ var Glow = (function() {
       for (var li = 0; li < selected.length; li++) {
         var src = selected[li];
 
-        // Apply Glow Only to the source layer
+        // Apply Glow Only to the source layer.
+        // Fix #3 (data-preservation): only overwrite source opacity when it is
+        // "clean" — no keyframes and no existing expression — so user-authored
+        // opacity animations or expressions are never silently destroyed.
+        var opProp = src.property('ADBE Opacity');
         if (useController) {
           // Expression-driven: controller checkbox toggles source visibility
-          src.property('ADBE Opacity').expression =
-            'thisComp.layer("GLOW_CONTROLLER").effect("Glow Only")("Checkbox")==1 ? 0 : 100';
+          if (opProp.numKeys === 0 && (!opProp.expression || opProp.expression === '')) {
+            opProp.expression = 'thisComp.layer("' + ctrlName + '").effect("Glow Only")("Checkbox")==1 ? 0 : 100';
+          }
         } else {
-          // Baked: static opacity when not using controller
-          if (glowOnly) {
-            src.property('ADBE Opacity').setValue(0);
+          // Baked: static opacity when not using controller — only set if no keyframes
+          if (glowOnly && opProp.numKeys === 0) {
+            opProp.setValue(0);
           }
         }
 
@@ -117,16 +130,16 @@ var Glow = (function() {
 
               // Radius: controller base * per-pass factor (factor literal is baked in)
               glowFx.property('ADBE Glow Radius').expression =
-                'var c=thisComp.layer("GLOW_CONTROLLER"); c.effect("Glow Radius")("Slider") * ' + passRadiusFactor + ';';
+                'var c=thisComp.layer("' + ctrlName + '"); c.effect("Glow Radius")("Slider") * ' + passRadiusFactor + ';';
 
               // Intensity: controller intensity * sourceGain * per-pass scale literal
               glowFx.property('ADBE Glow Intensity').expression =
-                'var c=thisComp.layer("GLOW_CONTROLLER"); ' +
+                'var c=thisComp.layer("' + ctrlName + '"); ' +
                 '(c.effect("Glow Intensity")("Slider")/100) * (c.effect("Source Gain")("Slider")/100) * ' + passScale + ';';
 
               // Threshold: soften by Threshold Softness (lowers effective threshold)
               glowFx.property('ADBE Glow Threshold').expression =
-                'var c=thisComp.layer("GLOW_CONTROLLER"); ' +
+                'var c=thisComp.layer("' + ctrlName + '"); ' +
                 'var t=c.effect("Threshold")("Slider"); ' +
                 'var s=c.effect("Threshold Softness")("Slider"); ' +
                 'Math.max(0,(t - s))/255;';
@@ -135,7 +148,7 @@ var Glow = (function() {
               if (tintAmount > 0 || colorize) {
                 glowFx.property('ADBE Glow Operation').setValue(3);
                 glowFx.property('ADBE Glow Color A').expression =
-                  'thisComp.layer("GLOW_CONTROLLER").effect("Tint Color")("Color");';
+                  'thisComp.layer("' + ctrlName + '").effect("Tint Color")("Color");';
               }
 
             } else {
@@ -161,14 +174,10 @@ var Glow = (function() {
 
           dup.blendingMode = blendMode;
 
-          if (useController) {
-            // Opacity expression: tracks controller-driven pass scale literal
-            dup.property('ADBE Opacity').expression =
-              'var c=thisComp.layer("GLOW_CONTROLLER"); ' +
-              '100 * ' + passScale + ';';
-          } else {
-            dup.property('ADBE Opacity').setValue(100 * passScale);
-          }
+          // Fix #2: pass-layer opacity is a baked constant in both paths; the old
+          // expression referenced 'c' but never used it, making it a fragile static.
+          // Use setValue uniformly — no expression needed here.
+          dup.property('ADBE Opacity').setValue(100 * passScale);
         }
         count++;
       }
