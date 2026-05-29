@@ -2,26 +2,38 @@
 
 window.GlowUI = (function() {
   var _state = {
-    intensity:   150,
-    radius:      60,
-    falloff:     'soft',
-    threshold:   80,
-    glowColor:   '#ffffff',
-    colorize:    false,
-    saturation:  0,
-    hueShift:    0,
-    blendMode:   'screen',
-    layers:      2,
-    quality:     'quality'
+    // --- existing fields (keep for backward-compat) ---
+    intensity:          150,
+    radius:             60,
+    falloff:            'soft',
+    threshold:          80,
+    glowColor:          '#ffffff',
+    colorize:           false,
+    saturation:         0,
+    hueShift:           0,
+    blendMode:          'screen',
+    layers:             2,
+    quality:            'quality',
+    // --- new v0.1 MVP fields ---
+    tintAmount:         0,
+    sourceGain:         100,
+    thresholdSoftness:  20,
+    glowOnly:           false,
+    useController:      true
   };
 
   function getParams() { return Utils.deepClone(_state); }
 
   var _sliders = {};
   var _falloffGroup, _blendDD, _qualityGroup, _glowColor, _colorizeToggle, _status;
+  var _glowOnlyToggle, _useControllerToggle;
 
   function applyPreset(p) {
+    // Merge only the keys that exist in the preset object so older presets
+    // that don't include the new v0.1 fields still work without errors.
     Object.assign(_state, p);
+
+    // Existing sliders / controls
     _sliders.intensity.setValue(p.intensity);
     _sliders.radius.setValue(p.radius);
     _sliders.threshold.setValue(p.threshold);
@@ -33,10 +45,17 @@ window.GlowUI = (function() {
     _qualityGroup.setValue(p.quality);
     _glowColor.setValue(p.glowColor);
     _colorizeToggle.setValue(p.colorize);
+
+    // New v0.1 fields — guarded so older presets (missing these keys) are safe
+    if (p.tintAmount        !== undefined) { _sliders.tintAmount.setValue(p.tintAmount); }
+    if (p.sourceGain        !== undefined) { _sliders.sourceGain.setValue(p.sourceGain); }
+    if (p.thresholdSoftness !== undefined) { _sliders.thresholdSoftness.setValue(p.thresholdSoftness); }
+    if (p.glowOnly          !== undefined) { _glowOnlyToggle.setValue(p.glowOnly); }
+    if (p.useController     !== undefined) { _useControllerToggle.setValue(p.useController); }
   }
 
   function init(container) {
-    // Core glow
+    // ── Glow ─────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Glow'));
     _sliders.intensity = new Slider({ label: 'Intensity %', min: 0, max: 500, value: 150, step: 1, defaultValue: 150,
       tooltip: 'Overall glow brightness multiplier across all passes',
@@ -51,7 +70,18 @@ window.GlowUI = (function() {
     container.appendChild(_sliders.radius.el);
     container.appendChild(_sliders.layers.el);
 
-    // Falloff
+    // ── Source ────────────────────────────────────────────────────────────────
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Source'));
+    _sliders.sourceGain = new Slider({ label: 'Source Gain %', min: 0, max: 300, value: 100, step: 1, defaultValue: 100,
+      tooltip: 'Multiply the glow source brightness before it is blurred — boosts dim sources',
+      onChange: function(v) { _state.sourceGain = v; } });
+    _sliders.thresholdSoftness = new Slider({ label: 'Threshold Softness', min: 0, max: 100, value: 20, step: 1, defaultValue: 20,
+      tooltip: 'Softens the glow threshold edge — higher values widen the glow source',
+      onChange: function(v) { _state.thresholdSoftness = v; } });
+    container.appendChild(_sliders.sourceGain.el);
+    container.appendChild(_sliders.thresholdSoftness.el);
+
+    // ── Falloff ───────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Falloff'));
     _falloffGroup = new ButtonGroup({
       tooltip: 'How intensity decreases across successive glow passes',
@@ -69,14 +99,17 @@ window.GlowUI = (function() {
     container.appendChild(_falloffGroup.el);
     container.appendChild(_sliders.threshold.el);
 
-    // Color
+    // ── Color ─────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Color'));
     _glowColor = new ColorPicker({ label: 'Glow Color', value: '#ffffff',
-      tooltip: 'Tint color applied when Colorize is enabled',
+      tooltip: 'Tint color applied when Colorize or Tint Amount is enabled',
       onChange: function(v) { _state.glowColor = v; } });
     _colorizeToggle = new Toggle({ label: 'Colorize glow', value: false,
       tooltip: 'Apply the Glow Color tint to the glow layers',
       onChange: function(v) { _state.colorize = v; } });
+    _sliders.tintAmount = new Slider({ label: 'Tint Amount %', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Mix the glow toward the Glow Color — 0 = source color, 100 = full tint',
+      onChange: function(v) { _state.tintAmount = v; } });
     _sliders.saturation = new Slider({ label: 'Saturation Boost', min: -100, max: 100, value: 0, step: 1, defaultValue: 0,
       tooltip: 'Boost (+) or reduce (−) color saturation of each glow pass',
       onChange: function(v) { _state.saturation = v; } });
@@ -85,10 +118,11 @@ window.GlowUI = (function() {
       onChange: function(v) { _state.hueShift = v; } });
     container.appendChild(_glowColor.el);
     container.appendChild(_colorizeToggle.el);
+    container.appendChild(_sliders.tintAmount.el);
     container.appendChild(_sliders.saturation.el);
     container.appendChild(_sliders.hueShift.el);
 
-    // Blend & Quality
+    // ── Output ────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Output'));
     _blendDD = new Dropdown({
       label: 'Blend Mode',
@@ -111,8 +145,16 @@ window.GlowUI = (function() {
       value: 'quality',
       onChange: function(v) { _state.quality = v; }
     });
+    _glowOnlyToggle = new Toggle({ label: 'Glow Only', value: false,
+      tooltip: 'Hide the source layer so only the glow passes are visible',
+      onChange: function(v) { _state.glowOnly = v; } });
+    _useControllerToggle = new Toggle({ label: 'Create Live Controller', value: true,
+      tooltip: 'Create a GLOW_CONTROLLER null with expression-linked controls for live editing',
+      onChange: function(v) { _state.useController = v; } });
     container.appendChild(_blendDD.el);
     container.appendChild(_qualityGroup.el);
+    container.appendChild(_glowOnlyToggle.el);
+    container.appendChild(_useControllerToggle.el);
 
     var applyBtn = Utils.el('button', { class: 'action-btn' }, 'Apply Glow');
     applyBtn.addEventListener('click', function() { _apply(applyBtn); });
