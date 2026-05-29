@@ -107,30 +107,77 @@ window.FactoryPresets = {
   },
 
   sorter: {
-    'Glitch H': {
+    'Classic Bright Sort': {
+      targetMode: 'selectedLayers', applyMode: 'quick',
       sortMode: 'brightness', direction: 'horizontal',
-      sortLength: 300, threshold: 50, randomness: 10,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30, iterations: 1
+      sortLength: 300, thresholdLow: 55, thresholdHigh: 100, thresholdSoftness: 8,
+      randomness: 10, iterations: 1,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: false, animStyle: 'drift', animSpeed: 1, animAmount: 50, loopDuration: 2,
+      angle: 0
     },
-    'Data Mosh': {
-      sortMode: 'brightness', direction: 'diagonal',
-      sortLength: 500, threshold: 30, randomness: 40,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30, iterations: 2
+    'Dark Area Melt': {
+      targetMode: 'adjustmentLayer', applyMode: 'quick',
+      sortMode: 'brightness', direction: 'vertical',
+      sortLength: 420, thresholdLow: 10, thresholdHigh: 50, thresholdSoftness: 12,
+      randomness: 25, iterations: 1,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: true, animStyle: 'drift', animSpeed: 0.6, animAmount: 80, loopDuration: 4,
+      angle: 0
     },
-    'Ice Crystal': {
-      sortMode: 'saturation', direction: 'vertical',
-      sortLength: 200, threshold: 70, randomness: 5,
-      useColorKey: false, keyColor: '#0000ff', keyHueTol: 30, iterations: 1
+    'Vertical Data Fall': {
+      targetMode: 'adjustmentLayer', applyMode: 'quick',
+      sortMode: 'brightness', direction: 'vertical',
+      sortLength: 450, thresholdLow: 55, thresholdHigh: 100, thresholdSoftness: 8,
+      randomness: 20, iterations: 2,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: true, animStyle: 'lengthWave', animSpeed: 0.8, animAmount: 120, loopDuration: 3,
+      angle: 0
     },
-    'Signal Loss': {
-      sortMode: 'hue', direction: 'horizontal',
-      sortLength: 150, threshold: 40, randomness: 60,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30, iterations: 3
+    'Horizontal Scan Smear': {
+      targetMode: 'selectedLayers', applyMode: 'quick',
+      sortMode: 'brightness', direction: 'horizontal',
+      sortLength: 550, thresholdLow: 40, thresholdHigh: 90, thresholdSoftness: 15,
+      randomness: 5, iterations: 1,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: true, animStyle: 'scanlineMove', animSpeed: 1.2, animAmount: 100, loopDuration: 2,
+      angle: 0
     },
-    'Chromatic': {
+    'Red Channel Break': {
+      targetMode: 'duplicateLayer', applyMode: 'quick',
       sortMode: 'red', direction: 'horizontal',
-      sortLength: 400, threshold: 45, randomness: 20,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30, iterations: 1
+      sortLength: 400, thresholdLow: 45, thresholdHigh: 100, thresholdSoftness: 5,
+      randomness: 20, iterations: 1,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: false, animStyle: 'drift', animSpeed: 1, animAmount: 50, loopDuration: 2,
+      angle: 0
+    },
+    'Cyberpunk Hue Sort': {
+      targetMode: 'adjustmentLayer', applyMode: 'rig',
+      sortMode: 'hue', direction: 'horizontal',
+      sortLength: 250, thresholdLow: 30, thresholdHigh: 85, thresholdSoftness: 20,
+      randomness: 35, iterations: 1,
+      useColorKey: false, keyColor: '#ff00ff', keyHueTol: 45,
+      animate: true, animStyle: 'pulse', animSpeed: 1.5, animAmount: 90, loopDuration: 2,
+      angle: 0
+    },
+    'VHS Signal Tear': {
+      targetMode: 'selectedLayers', applyMode: 'quick',
+      sortMode: 'saturation', direction: 'horizontal',
+      sortLength: 600, thresholdLow: 20, thresholdHigh: 75, thresholdSoftness: 18,
+      randomness: 60, iterations: 2,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: true, animStyle: 'randomFlicker', animSpeed: 8, animAmount: 200, loopDuration: 1,
+      angle: 0
+    },
+    'Datamosh Lines': {
+      targetMode: 'adjustmentLayer', applyMode: 'rig',
+      sortMode: 'edges', direction: 'angle',
+      sortLength: 350, thresholdLow: 50, thresholdHigh: 95, thresholdSoftness: 5,
+      randomness: 15, iterations: 1,
+      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
+      animate: true, animStyle: 'thresholdSweep', animSpeed: 0.5, animAmount: 60, loopDuration: 5,
+      angle: 15
     }
   },
 
