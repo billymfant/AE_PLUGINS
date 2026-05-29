@@ -12,13 +12,24 @@ window.DistortionsUI = (function() {
     meshResX: 5, meshResY: 5,
     swirlAngle: 90,
     amplitude: 20, frequency: 5, waveSpeed: 1,
-    blendOpacity: 100
+    blendOpacity: 100,
+    // Animation + targeting fields
+    targetMode:       'selectedLayers',
+    adjustmentName:   'DISTORTION_ADJUSTMENT',
+    animateEnabled:   false,
+    animationMode:    'loop',
+    animDuration:     2.0,
+    animSpeed:        1.0,
+    animAmount:       25,
+    randomSeed:       1,
+    animationOutput:  'expressions'
   };
 
   function getParams() { return Utils.deepClone(_state); }
 
   var _sliders = {};
   var _typeGroup, _lensSection, _warpSection, _swirlSection, _waveSection, _status;
+  var _targetGroup, _animEnabledGroup, _animModeGroup, _animOutputGroup;
 
   function applyPreset(p) {
     Object.assign(_state, p);
@@ -30,6 +41,15 @@ window.DistortionsUI = (function() {
     _sliders.centerX.setValue(p.centerX !== undefined ? p.centerX : 0.5);
     _sliders.centerY.setValue(p.centerY !== undefined ? p.centerY : 0.5);
     _showSection(p.distType);
+    // New fields — guarded so older presets without them don't throw
+    if (p.targetMode !== undefined)      { _targetGroup.setValue(p.targetMode); }
+    if (p.animateEnabled !== undefined)  { _animEnabledGroup.setValue(p.animateEnabled); }
+    if (p.animationMode !== undefined)   { _animModeGroup.setValue(p.animationMode); }
+    if (p.animationOutput !== undefined) { _animOutputGroup.setValue(p.animationOutput); }
+    if (p.animDuration !== undefined)    { _sliders.animDuration.setValue(p.animDuration); }
+    if (p.animSpeed !== undefined)       { _sliders.animSpeed.setValue(p.animSpeed); }
+    if (p.animAmount !== undefined)      { _sliders.animAmount.setValue(p.animAmount); }
+    if (p.randomSeed !== undefined)      { _sliders.randomSeed.setValue(p.randomSeed); }
   }
 
   function init(container) {
@@ -59,7 +79,7 @@ window.DistortionsUI = (function() {
       tooltip: 'Radius of the affected area for swirl and bulge effects',
       onChange: function(v) { _state.radius = v; } });
     _sliders.feather = new Slider({ label: 'Feather px', min: 0, max: 200, value: 0, step: 1, defaultValue: 0,
-      tooltip: 'Soft edge blend — when > 0, distortion is applied to a duplicate layer with a feathered mask',
+      tooltip: 'Soft edge blend — when > 0, distortion is applied to the target layer with a feathered circular mask',
       onChange: function(v) { _state.feather = v; } });
     _sliders.blendOpacity = new Slider({ label: 'Opacity %', min: 0, max: 100, value: 100, step: 1, defaultValue: 100,
       tooltip: 'Opacity of the distorted layer (or duplicate when feather > 0)',
@@ -132,6 +152,78 @@ window.DistortionsUI = (function() {
 
     _showSection('lens');
 
+    // ── Apply Target ──────────────────────────────────────────────────────────
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Apply Target'));
+    _targetGroup = new ButtonGroup({
+      tooltip: 'Where to apply the distortion effect',
+      options: [
+        { value: 'selectedLayers',    label: 'Selected' },
+        { value: 'duplicateLayers',   label: 'Duplicate' },
+        { value: 'newAdjustment',     label: 'New Adj' },
+        { value: 'selectedAdjustment',label: 'Sel Adj' },
+        { value: 'precompAdjustment', label: 'Precomp Adj' }
+      ],
+      value: 'selectedLayers',
+      onChange: function(v) { _state.targetMode = v; }
+    });
+    container.appendChild(_targetGroup.el);
+
+    // ── Animation ─────────────────────────────────────────────────────────────
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Animation'));
+
+    _animEnabledGroup = new ButtonGroup({
+      tooltip: 'Enable or disable animated distortion',
+      options: [
+        { value: false, label: 'Static' },
+        { value: true,  label: 'Animated' }
+      ],
+      value: false,
+      onChange: function(v) { _state.animateEnabled = v; }
+    });
+    container.appendChild(_animEnabledGroup.el);
+
+    _animModeGroup = new ButtonGroup({
+      tooltip: 'Animation pattern for the distortion over time',
+      options: [
+        { value: 'loop',      label: 'Loop' },
+        { value: 'pingpong',  label: 'Ping Pong' },
+        { value: 'drift',     label: 'Drift' },
+        { value: 'pulse',     label: 'Pulse' }
+      ],
+      value: 'loop',
+      onChange: function(v) { _state.animationMode = v; }
+    });
+    container.appendChild(_animModeGroup.el);
+
+    _animOutputGroup = new ButtonGroup({
+      tooltip: 'How to bake the animation into AE — expressions or keyframes',
+      options: [
+        { value: 'expressions', label: 'Expressions' },
+        { value: 'keyframes',   label: 'Keyframes' }
+      ],
+      value: 'expressions',
+      onChange: function(v) { _state.animationOutput = v; }
+    });
+    container.appendChild(_animOutputGroup.el);
+
+    _sliders.animDuration = new Slider({ label: 'Loop Duration', min: 0.25, max: 20, value: 2.0, step: 0.05, decimals: 2, defaultValue: 2.0,
+      tooltip: 'Duration in seconds for one animation cycle',
+      onChange: function(v) { _state.animDuration = v; } });
+    _sliders.animSpeed = new Slider({ label: 'Speed', min: 0, max: 10, value: 1.0, step: 0.1, decimals: 1, defaultValue: 1.0,
+      tooltip: 'Overall speed multiplier for the animation',
+      onChange: function(v) { _state.animSpeed = v; } });
+    _sliders.animAmount = new Slider({ label: 'Anim Amount', min: 0, max: 200, value: 25, step: 1, defaultValue: 25,
+      tooltip: 'Amplitude of the animated parameter oscillation',
+      onChange: function(v) { _state.animAmount = v; } });
+    _sliders.randomSeed = new Slider({ label: 'Random Seed', min: 1, max: 9999, value: 1, step: 1, defaultValue: 1,
+      tooltip: 'Seed value used for drift (noise-based) animation',
+      onChange: function(v) { _state.randomSeed = v; } });
+    container.appendChild(_sliders.animDuration.el);
+    container.appendChild(_sliders.animSpeed.el);
+    container.appendChild(_sliders.animAmount.el);
+    container.appendChild(_sliders.randomSeed.el);
+
+    // ── Apply button + status ─────────────────────────────────────────────────
     var applyBtn = Utils.el('button', { class: 'action-btn' }, 'Apply Distortion');
     applyBtn.addEventListener('click', function() { _apply(applyBtn); });
     container.appendChild(applyBtn);
