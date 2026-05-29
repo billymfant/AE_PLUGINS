@@ -185,10 +185,11 @@ window.DistortionsUI = (function() {
     _animModeGroup = new ButtonGroup({
       tooltip: 'Animation pattern for the distortion over time',
       options: [
-        { value: 'loop',      label: 'Loop' },
-        { value: 'pingpong',  label: 'Ping Pong' },
-        { value: 'drift',     label: 'Drift' },
-        { value: 'pulse',     label: 'Pulse' }
+        { value: 'loop',           label: 'Loop' },
+        { value: 'pingpong',       label: 'Ping Pong' },
+        { value: 'drift',          label: 'Drift' },
+        { value: 'pulse',          label: 'Pulse' },
+        { value: 'manualKeyframes',label: 'Keys' }
       ],
       value: 'loop',
       onChange: function(v) { _state.animationMode = v; }

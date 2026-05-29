@@ -262,7 +262,16 @@ var Distortions = (function() {
       var seed     = params.randomSeed      || 1;
       var output   = params.animationOutput || 'expressions';
 
-      if (output === 'expressions') {
+      if (output === 'keyframes' || mode === 'manualKeyframes') {
+        // Bake 5 keyframes over animDuration using loop (base → +amount → base → -amount → base)
+        var t0 = comp.time;
+        prop.setValueAtTime(t0,                    base);
+        prop.setValueAtTime(t0 + duration * 0.25,  base + amount);
+        prop.setValueAtTime(t0 + duration * 0.5,   base);
+        prop.setValueAtTime(t0 + duration * 0.75,  base - amount);
+        prop.setValueAtTime(t0 + duration,         base);
+
+      } else {
         var expr = '';
         expr += 'base = ' + base + ';\n';
         expr += 'amount = ' + amount + ';\n';
@@ -286,15 +295,6 @@ var Distortions = (function() {
         }
 
         prop.expression = expr;
-
-      } else {
-        // Keyframes — bake 5 over animDuration using loop pattern
-        var t0 = comp.time;
-        prop.setValueAtTime(t0,                    base);
-        prop.setValueAtTime(t0 + duration * 0.25,  base + amount);
-        prop.setValueAtTime(t0 + duration * 0.5,   base);
-        prop.setValueAtTime(t0 + duration * 0.75,  base - amount);
-        prop.setValueAtTime(t0 + duration,         base);
       }
     } catch(e) {}
   }
