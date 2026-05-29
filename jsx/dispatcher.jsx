@@ -29,6 +29,7 @@ function dispatch(action, paramsJSON) {
         var result;
         if      (action === 'slides.generate')   result = Slides.generate(params);
         else if (action === 'grids.generate')    result = Grids.generate(params);
+        else if (action === 'grids.createRig')   result = Grids.createRig(params);
         else if (action === 'glow.apply')        result = Glow.apply(params);
         else if (action === 'sorter.apply')      result = Sorter.apply(params);
         else if (action === 'distortions.apply')   result = Distortions.apply(params);

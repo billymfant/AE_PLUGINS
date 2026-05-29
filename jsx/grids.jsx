@@ -235,5 +235,138 @@ var Grids = (function() {
     } catch(e) {}
   }
 
-  return { generate: generate };
+  // ── Layout Rig ─────────────────────────────────────────────
+
+  function _addSlider(layer, sliderName, defaultValue) {
+    var fx = layer.property('ADBE Effect Parade').addProperty('ADBE Slider Control');
+    fx.name = sliderName;
+    fx.property('ADBE Slider Control-0001').setValue(defaultValue);
+    return fx;
+  }
+
+  function createRig(params) {
+    return withUndo('Grids Layout Rig', function() {
+      var comp = requireComp();
+      var selected = comp.selectedLayers;
+      if (!selected || selected.length === 0) {
+        return { error: 'Select one or more layers to build a layout rig.' };
+      }
+
+      var defaultGridW = (params.gridWidth > 0) ? params.gridWidth : comp.width;
+      var defaultGridH = (params.gridHeight > 0) ? params.gridHeight : comp.height;
+      var defaultColumns = params.columns || 3;
+      var defaultGapX = (params.gapX !== undefined) ? params.gapX : 24;
+      var defaultGapY = (params.gapY !== undefined) ? params.gapY : 24;
+      var defaultMarginX = (params.marginX !== undefined) ? params.marginX : 60;
+      var defaultMarginY = (params.marginY !== undefined) ? params.marginY : 60;
+      var defaultFitMode = params.fitMode || 5;
+      var defaultItemScale = (params.itemScale !== undefined) ? params.itemScale : 100;
+      var defaultOffsetX = (params.offsetX !== undefined) ? params.offsetX : 0;
+      var defaultOffsetY = (params.offsetY !== undefined) ? params.offsetY : 0;
+      var defaultAltRow = (params.altRowOffset !== undefined) ? params.altRowOffset : 0;
+      var defaultAltCol = (params.altColOffset !== undefined) ? params.altColOffset : 0;
+      var defaultProgX = (params.progShiftX !== undefined) ? params.progShiftX : 0;
+      var defaultProgY = (params.progShiftY !== undefined) ? params.progShiftY : 0;
+
+      var ctrl = comp.layers.addNull();
+      ctrl.name = 'GRID_CONTROL';
+      ctrl.moveToBeginning();
+
+      _addSlider(ctrl, 'Columns',                defaultColumns);
+      _addSlider(ctrl, 'Gap X',                  defaultGapX);
+      _addSlider(ctrl, 'Gap Y',                  defaultGapY);
+      _addSlider(ctrl, 'Margin X',               defaultMarginX);
+      _addSlider(ctrl, 'Margin Y',               defaultMarginY);
+      _addSlider(ctrl, 'Grid Width',             defaultGridW);
+      _addSlider(ctrl, 'Grid Height',            defaultGridH);
+      _addSlider(ctrl, 'Item Count',             selected.length);
+      _addSlider(ctrl, 'Fit Mode',               defaultFitMode);
+      _addSlider(ctrl, 'Item Scale',             defaultItemScale);
+      _addSlider(ctrl, 'Offset X',               defaultOffsetX);
+      _addSlider(ctrl, 'Offset Y',               defaultOffsetY);
+      _addSlider(ctrl, 'Alternate Row Offset',   defaultAltRow);
+      _addSlider(ctrl, 'Alternate Column Offset',defaultAltCol);
+      _addSlider(ctrl, 'Progressive Shift X',    defaultProgX);
+      _addSlider(ctrl, 'Progressive Shift Y',    defaultProgY);
+
+      for (var i = 0; i < selected.length; i++) {
+        var layer = selected[i];
+        var idx = i;
+
+        var posExpr = '' +
+          'var ctrl = thisComp.layer("GRID_CONTROL");\n' +
+          'var itemIndex = ' + idx + ';\n' +
+          'var cols = Math.max(1, Math.round(ctrl.effect("Columns")("Slider")));\n' +
+          'var gapX = ctrl.effect("Gap X")("Slider");\n' +
+          'var gapY = ctrl.effect("Gap Y")("Slider");\n' +
+          'var marginX = ctrl.effect("Margin X")("Slider");\n' +
+          'var marginY = ctrl.effect("Margin Y")("Slider");\n' +
+          'var gridW = ctrl.effect("Grid Width")("Slider");\n' +
+          'var gridH = ctrl.effect("Grid Height")("Slider");\n' +
+          'var offX = ctrl.effect("Offset X")("Slider");\n' +
+          'var offY = ctrl.effect("Offset Y")("Slider");\n' +
+          'var altRow = ctrl.effect("Alternate Row Offset")("Slider");\n' +
+          'var altCol = ctrl.effect("Alternate Column Offset")("Slider");\n' +
+          'var progX = ctrl.effect("Progressive Shift X")("Slider");\n' +
+          'var progY = ctrl.effect("Progressive Shift Y")("Slider");\n' +
+          'var itemCount = Math.max(1, Math.round(ctrl.effect("Item Count")("Slider")));\n' +
+          'var rows = Math.max(1, Math.ceil(itemCount / cols));\n' +
+          'var cellW = (gridW - marginX*2 - gapX*(cols-1)) / cols;\n' +
+          'var cellH = (gridH - marginY*2 - gapY*(rows-1)) / rows;\n' +
+          'var col = itemIndex % cols;\n' +
+          'var row = Math.floor(itemIndex / cols);\n' +
+          'var startX = (thisComp.width - gridW)/2 + marginX + cellW/2;\n' +
+          'var startY = (thisComp.height - gridH)/2 + marginY + cellH/2;\n' +
+          'var x = startX + col*(cellW+gapX) + offX;\n' +
+          'var y = startY + row*(cellH+gapY) + offY;\n' +
+          'x += (row % 2 == 1) ? altRow : 0;\n' +
+          'y += (col % 2 == 1) ? altCol : 0;\n' +
+          'x += row*progX; y += col*progY;\n' +
+          '[x, y];';
+
+        var scaleExpr = '' +
+          'var ctrl = thisComp.layer("GRID_CONTROL");\n' +
+          'var itemIndex = ' + idx + ';\n' +
+          'var fitMode = Math.round(ctrl.effect("Fit Mode")("Slider"));\n' +
+          'var itemScale = ctrl.effect("Item Scale")("Slider")/100;\n' +
+          'var cols = Math.max(1, Math.round(ctrl.effect("Columns")("Slider")));\n' +
+          'var gapX = ctrl.effect("Gap X")("Slider");\n' +
+          'var gapY = ctrl.effect("Gap Y")("Slider");\n' +
+          'var marginX = ctrl.effect("Margin X")("Slider");\n' +
+          'var marginY = ctrl.effect("Margin Y")("Slider");\n' +
+          'var gridW = ctrl.effect("Grid Width")("Slider");\n' +
+          'var gridH = ctrl.effect("Grid Height")("Slider");\n' +
+          'var itemCount = Math.max(1, Math.round(ctrl.effect("Item Count")("Slider")));\n' +
+          'var rows = Math.max(1, Math.ceil(itemCount / cols));\n' +
+          'var cellW = (gridW - marginX*2 - gapX*(cols-1)) / cols;\n' +
+          'var cellH = (gridH - marginY*2 - gapY*(rows-1)) / rows;\n' +
+          'function getLayerSize(){ try { var r = thisLayer.sourceRectAtTime(time,false); return [Math.max(1,r.width), Math.max(1,r.height)]; } catch(e){ return [Math.max(1,thisLayer.width), Math.max(1,thisLayer.height)]; } }\n' +
+          'var s = getLayerSize(); var sw=s[0], sh=s[1];\n' +
+          'var fitW = cellW/sw*100; var fitH = cellH/sh*100;\n' +
+          'var result;\n' +
+          'if (fitMode==1) { result = value; }\n' +
+          'else if (fitMode==2) { var f2=Math.max(fitW,fitH)*itemScale; result=[f2,f2]; }\n' +
+          'else if (fitMode==3) { var f3=fitW*itemScale; result=[f3,f3]; }\n' +
+          'else if (fitMode==4) { var f4=fitH*itemScale; result=[f4,f4]; }\n' +
+          'else if (fitMode==5) { var f5=Math.min(fitW,fitH)*itemScale; result=[f5,f5]; }\n' +
+          'else if (fitMode==6) { result=[fitW*itemScale, fitH*itemScale]; }\n' +
+          'else { result = value; }\n' +
+          'result;';
+
+        var posProp = layer.property('ADBE Position');
+        if (posProp.numKeys === 0 && posProp.expression === '') {
+          posProp.expression = posExpr;
+        }
+
+        var scaProp = layer.property('ADBE Scale');
+        if (scaProp.numKeys === 0 && scaProp.expression === '') {
+          scaProp.expression = scaleExpr;
+        }
+      }
+
+      return { success: true, count: selected.length };
+    });
+  }
+
+  return { generate: generate, createRig: createRig };
 })();
