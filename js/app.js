@@ -2,7 +2,7 @@
 
 (function () {
   var _tabs = ['slides', 'grids', 'glow', 'sorter', 'dist',
-               'colorlab', 'gradient', 'patterns', 'physics', 'particles'];
+               'colorlab', 'gradient', 'patterns', 'physics', 'particles', 'glitchmosh'];
 
   var _pluginNames = {
     slides:    'Slides Generator',
@@ -14,7 +14,8 @@
     gradient:  'Gradient Studio',
     patterns:  'Pattern Pro',
     physics:   'Physics Rig',
-    particles: 'Particle Engine'
+    particles: 'Particle Engine',
+    glitchmosh: 'GlitchMosh'
   };
 
   var _UIs = {
@@ -27,7 +28,8 @@
     gradient:  window.GradientUI,
     patterns:  window.PatternsUI,
     physics:   window.PhysicsUI,
-    particles: window.ParticlesUI
+    particles: window.ParticlesUI,
+    glitchmosh: window.GlitchMoshUI
   };
 
   // pluginId used for preset file namespacing
@@ -41,7 +43,8 @@
     gradient:  'gradient',
     patterns:  'patterns',
     physics:   'physics',
-    particles: 'particles'
+    particles: 'particles',
+    glitchmosh: 'glitchmosh'
   };
 
   function init() {
