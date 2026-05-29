@@ -40,18 +40,18 @@ var Distortions = (function() {
 
     if (mode === 'newAdjustment') {
       var adjName = params.adjustmentName || 'DISTORTION_ADJUSTMENT';
-      var adj = comp.layers.addSolid([1, 1, 1], adjName, comp.width, comp.height, comp.pixelAspect, comp.duration);
-      adj.adjustmentLayer = true;
+      // Capture the top-most selected layer REFERENCE before addSolid shifts indices
+      var topLayer = null;
       if (selected && selected.length > 0) {
-        // Find the top-most selected layer (lowest index)
         var topIdx = selected[0].index;
         for (var ti = 1; ti < selected.length; ti++) {
           if (selected[ti].index < topIdx) { topIdx = selected[ti].index; }
         }
-        adj.moveBefore(comp.layer(topIdx));
-      } else {
-        adj.moveToBeginning();
+        topLayer = comp.layer(topIdx);
       }
+      var adj = comp.layers.addSolid([1, 1, 1], adjName, comp.width, comp.height, comp.pixelAspect, comp.duration);
+      adj.adjustmentLayer = true;
+      if (topLayer) { adj.moveBefore(topLayer); } else { adj.moveToBeginning(); }
       return [adj];
     }
 
@@ -82,8 +82,12 @@ var Distortions = (function() {
       }
       var precompName = (params.adjustmentName || 'DISTORTION_ADJUSTMENT') + '_Distort';
       comp.layers.precompose(indices, precompName, true);
-      // After precompose the new precomp layer sits at topPrecompIdx
-      var precompLayer = comp.layer(topPrecompIdx);
+      // Find the new precomp layer by name — cached index is unreliable for non-contiguous selections
+      var precompLayer = null;
+      for (var pli = 1; pli <= comp.numLayers; pli++) {
+        if (comp.layer(pli).name === precompName) { precompLayer = comp.layer(pli); break; }
+      }
+      if (!precompLayer) { return { error: 'Precompose failed.' }; }
       var pcAdj = comp.layers.addSolid([1, 1, 1], params.adjustmentName || 'DISTORTION_ADJUSTMENT', comp.width, comp.height, comp.pixelAspect, comp.duration);
       pcAdj.adjustmentLayer = true;
       pcAdj.moveBefore(precompLayer);
@@ -255,6 +259,8 @@ var Distortions = (function() {
 
     try {
       var prop     = fx.property(propId);
+      // Read the value _configureEffect actually wrote rather than recomputing from params
+      base         = prop.value;
       var mode     = params.animationMode   || 'loop';
       var duration = params.animDuration    || 2.0;
       var speed    = params.animSpeed       || 1.0;
