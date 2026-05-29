@@ -95,7 +95,8 @@ var Slides = (function() {
         var pUp = shape.property('ADBE Position');
         pUp.setValueAtTime(startTime, [x, y + animOffset]);
         if (useOvershoot) {
-          pUp.setValueAtTime(midTime, [x, y - overshootAmount]);
+          // I5: overshoot is a percentage of the slide distance, not raw pixels
+          pUp.setValueAtTime(midTime, [x, y - animOffset * (overshootAmount / 100)]);
           pUp.setValueAtTime(endTime, [x, y]);
           _applyEase(pUp, 3);
         } else {
@@ -114,7 +115,8 @@ var Slides = (function() {
         var pDn = shape.property('ADBE Position');
         pDn.setValueAtTime(startTime, [x, y - animOffset]);
         if (useOvershoot) {
-          pDn.setValueAtTime(midTime, [x, y + overshootAmount]);
+          // I5: proportional overshoot
+          pDn.setValueAtTime(midTime, [x, y + animOffset * (overshootAmount / 100)]);
           pDn.setValueAtTime(endTime, [x, y]);
           _applyEase(pDn, 3);
         } else {
@@ -133,7 +135,8 @@ var Slides = (function() {
         var pLt = shape.property('ADBE Position');
         pLt.setValueAtTime(startTime, [x + animOffset, y]);
         if (useOvershoot) {
-          pLt.setValueAtTime(midTime, [x - overshootAmount, y]);
+          // I5: proportional overshoot
+          pLt.setValueAtTime(midTime, [x - animOffset * (overshootAmount / 100), y]);
           pLt.setValueAtTime(endTime, [x, y]);
           _applyEase(pLt, 3);
         } else {
@@ -152,7 +155,8 @@ var Slides = (function() {
         var pRt = shape.property('ADBE Position');
         pRt.setValueAtTime(startTime, [x - animOffset, y]);
         if (useOvershoot) {
-          pRt.setValueAtTime(midTime, [x + overshootAmount, y]);
+          // I5: proportional overshoot
+          pRt.setValueAtTime(midTime, [x + animOffset * (overshootAmount / 100), y]);
           pRt.setValueAtTime(endTime, [x, y]);
           _applyEase(pRt, 3);
         } else {
@@ -342,6 +346,17 @@ var Slides = (function() {
 
         groupLayer = comp.layers.addNull();
         groupLayer.name = groupName;
+        // C1: pin the group null to comp-space origin so parented children
+        // inherit comp-space coords directly from the position expression.
+        try {
+          groupLayer.property('ADBE Anchor Point').setValue([0, 0]);
+          groupLayer.property('ADBE Position').setValue([0, 0]);
+        } catch(groupOriginErr) {
+          try {
+            groupLayer.property('ADBE Anchor Point').setValue([0, 0, 0]);
+            groupLayer.property('ADBE Position').setValue([0, 0, 0]);
+          } catch(e3d) {}
+        }
       }
 
       // ── main null container (fallback when no controller) ─────────
@@ -354,9 +369,12 @@ var Slides = (function() {
       // ── position expression template (baked idx) ──────────────────
       // Used when useController is true.
       // The expression runs inside AE so AE expression syntax is fine.
-      function _buildPosExpr(bakeIdx, bakeRows, bakeCols, bakeStartX, bakeStartY, bakeGH, bakeGV, bakeSW, bakeSH, bakeRand) {
+      // I1+C2: both Rows and Columns are read live from the controller;
+      // no baked row count, no numLayers*0 no-ops.
+      function _buildPosExpr(bakeIdx) {
         return [
           'var ctrl = thisComp.layer("' + controllerName + '");',
+          'var rows = Math.max(1, Math.round(ctrl.effect("Rows")("Slider")));',
           'var cols = Math.max(1, Math.round(ctrl.effect("Columns")("Slider")));',
           'var w    = ctrl.effect("Slide Width")("Slider");',
           'var h    = ctrl.effect("Slide Height")("Slider");',
@@ -368,9 +386,9 @@ var Slides = (function() {
           'var r   = Math.floor(idx / cols);',
           'var c   = idx % cols;',
           'var totalW = cols * w + (cols - 1) * gapX;',
-          'var totalH = thisComp.numLayers * 0 + ' + (bakeRows) + ' * h + (' + (bakeRows) + ' - 1) * gapY;',
+          'var totalH = rows * h + (rows - 1) * gapY;',
           'var sX = (thisComp.width  - totalW) / 2 + w / 2;',
-          'var sY = (thisComp.height - (thisComp.numLayers * 0 + ' + (bakeRows) + ' * h + (' + (bakeRows) + ' - 1) * gapY)) / 2 + h / 2;',
+          'var sY = (thisComp.height - totalH) / 2 + h / 2;',
           'var x  = sX + c * (w + gapX);',
           'var y  = sY + r * (h + gapY);',
           'seedRandom(idx + seed, true);',
@@ -425,12 +443,25 @@ var Slides = (function() {
           // ── Selected-layers mode ───────────────────────────────────
           layer = selectedLayers[i];
 
-          // Fit layer into cell (contain)
+          // Fit layer into cell (contain — scale setValue always safe)
           var srcW = layer.width  || sW;
           var srcH = layer.height || sH;
           var fitScale = Math.min(sW / srcW, sH / srcH) * 100;
           layer.property('ADBE Scale').setValue([fitScale, fitScale]);
-          layer.property('ADBE Position').setValue([x, y]);
+
+          // I3: when controller is active, drive position via expression and
+          // parent to groupLayer (same as the empty-slides path); otherwise
+          // fall back to static setValue positioning.
+          if (useController && groupLayer) {
+            try {
+              var selPosExpr = _buildPosExpr(i);
+              layer.property('ADBE Position').expression = selPosExpr;
+            } catch(selExprErr) {
+              layer.property('ADBE Position').setValue([x, y]);
+            }
+          } else {
+            layer.property('ADBE Position').setValue([x, y]);
+          }
 
           if (rotR > 0) {
             layer.property('ADBE Rotate Z').setValue((rng() - 0.5) * rotR * 2);
@@ -487,7 +518,7 @@ var Slides = (function() {
           // Position — static or expression-driven
           if (useController) {
             try {
-              var posExpr = _buildPosExpr(i, rows, cols, startX, startY, gH, gV, sW, sH, rand);
+              var posExpr = _buildPosExpr(i);
               shape.property('ADBE Position').expression = posExpr;
             } catch(exprErr) {
               shape.property('ADBE Position').setValue([x, y]);
