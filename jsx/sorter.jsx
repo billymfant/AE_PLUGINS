@@ -12,6 +12,7 @@ var Sorter = (function() {
       var length       = params.sortLength     || 200;
       var threshLow    = (params.thresholdLow  !== undefined) ? params.thresholdLow  : (params.threshold !== undefined ? params.threshold : 60);
       var threshHigh   = (params.thresholdHigh !== undefined) ? params.thresholdHigh : 100;
+      var threshSoft   = (params.thresholdSoftness !== undefined) ? params.thresholdSoftness : 10;
       var randomness   = params.randomness     || 0;
       var iterations   = params.iterations     || 1;
       var useColorKey  = params.useColorKey    || false;
@@ -42,16 +43,17 @@ var Sorter = (function() {
 
         if (targetMode === 'adjustmentLayer') {
           // tgt IS the adjustment layer — apply in-place effect stack
-          _applyInPlaceStack(tgt, params, controller, threshLow, threshHigh, randomness, direction, length, mode, animate, animStyle, animSpeed, animAmount);
+          _applyInPlaceStack(tgt, params, controller, threshLow, threshHigh, threshSoft, randomness, direction, length, mode, animate, animStyle, animSpeed, animAmount);
           count++;
         } else if (targetMode === 'precompRig') {
-          // tgt is the precomp layer — the adj was already created above it; apply to adj
-          _applyInPlaceStack(tgt, params, controller, threshLow, threshHigh, randomness, direction, length, mode, animate, animStyle, animSpeed, animAmount);
+          // tgt is the ADJUSTMENT layer created above the precomp — apply in-place effect stack
+          _applyInPlaceStack(tgt, params, controller, threshLow, threshHigh, threshSoft, randomness, direction, length, mode, animate, animStyle, animSpeed, animAmount);
           count++;
         } else {
           // selectedLayers / duplicateLayer: matte-pair approach, per-iteration
+          var anchor = tgt;
           for (var iter = 0; iter < iterations; iter++) {
-            _applyMattePair(comp, tgt, iter, params, controller, threshLow, threshHigh, randomness, direction, length, mode, useColorKey, keyColor, keyHueTol, animate, animStyle, animSpeed, animAmount);
+            anchor = _applyMattePair(comp, anchor, iter, params, controller, threshLow, threshHigh, threshSoft, randomness, direction, length, mode, useColorKey, keyColor, keyHueTol, animate, animStyle, animSpeed, animAmount);
           }
           count++;
         }
@@ -153,14 +155,16 @@ var Sorter = (function() {
   // ──────────────────────────────────────────────────────────────────────────
   // Matte-pair approach (selectedLayers / duplicateLayer)
   // ──────────────────────────────────────────────────────────────────────────
-  function _applyMattePair(comp, src, iter, params, controller, threshLow, threshHigh, randomness, direction, length, mode, useColorKey, keyColor, keyHueTol, animate, animStyle, animSpeed, animAmount) {
+  function _applyMattePair(comp, src, iter, params, controller, threshLow, threshHigh, threshSoft, randomness, direction, length, mode, useColorKey, keyColor, keyHueTol, animate, animStyle, animSpeed, animAmount) {
     var sortLayer  = src.duplicate();
     sortLayer.name = src.name + '_Sort_' + (iter + 1);
 
     var matteLayer  = src.duplicate();
     matteLayer.name = src.name + '_Matte_' + (iter + 1);
 
-    // Stack: matteLayer directly above sortLayer, both above src
+    // Stack: insert sortLayer directly above src (the current anchor),
+    // then matteLayer directly above sortLayer.
+    // This means for iter > 0 the pair sits above the previous iter's pair.
     sortLayer.moveBefore(src);
     matteLayer.moveBefore(sortLayer);
 
@@ -194,7 +198,11 @@ var Sorter = (function() {
         if (lvFx) {
           var blackPt = Math.round((threshLow  / 100) * 255);
           var whitePt = Math.round((threshHigh / 100) * 255);
-          lvFx.property('ADBE Levels2-0002').setValue([blackPt, whitePt]);
+          lvFx.property('ADBE Levels2-0002').setValue(blackPt);   // Input Black
+          lvFx.property('ADBE Levels2-0003').setValue(whitePt);   // Input White
+          try {
+            lvFx.property('ADBE Levels2-0004').setValue(1 + (threshSoft / 100)); // Input Gamma
+          } catch(e) {}
         }
       } catch(e) {}
     }
@@ -209,19 +217,22 @@ var Sorter = (function() {
       } catch(e) {}
     }
 
-    // Wire track matte
+    // Wire track matte — matteLayer is directly above sortLayer
     sortLayer.trackMatteType = TrackMatteType.LUMA;
 
     // Animation expressions on the sort layer's directional blur
     if (animate && dirBlur) {
       _applyAnimExpression(dirBlur, sortLayer, controller, params, length, animStyle, animSpeed, animAmount);
     }
+
+    // Return sortLayer as the new anchor for the next iteration
+    return sortLayer;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
   // In-place effect stack (adjustmentLayer / precompRig)
   // ──────────────────────────────────────────────────────────────────────────
-  function _applyInPlaceStack(layer, params, controller, threshLow, threshHigh, randomness, direction, length, mode, animate, animStyle, animSpeed, animAmount) {
+  function _applyInPlaceStack(layer, params, controller, threshLow, threshHigh, threshSoft, randomness, direction, length, mode, animate, animStyle, animSpeed, animAmount) {
     var fx        = layer.property('ADBE Effect Parade');
     var blurAngle = _sortAngle(direction, params.angle);
 
@@ -235,7 +246,11 @@ var Sorter = (function() {
       if (lvFx) {
         var blackPt = Math.round((threshLow  / 100) * 255);
         var whitePt = Math.round((threshHigh / 100) * 255);
-        lvFx.property('ADBE Levels2-0002').setValue([blackPt, whitePt]);
+        lvFx.property('ADBE Levels2-0002').setValue(blackPt);   // Input Black
+        lvFx.property('ADBE Levels2-0003').setValue(whitePt);   // Input White
+        try {
+          lvFx.property('ADBE Levels2-0004').setValue(1 + (threshSoft / 100)); // Input Gamma
+        } catch(e) {}
       }
     } catch(e) {}
 
@@ -324,38 +339,45 @@ var Sorter = (function() {
                     'var base   = ctrl.effect("Sort Length")("Slider");\n' +
                     'var speed  = ctrl.effect("Anim Speed")("Slider");\n' +
                     'var amount = ctrl.effect("Anim Amount")("Slider");\n' +
+                    'var loopDur = ctrl.effect("Loop Duration")("Slider");\n' +
+                    'loopDur = (loopDur <= 0) ? 1 : loopDur;\n' +
                     'var doAnim = ctrl.effect("Animate")("Checkbox");\n';
 
       if (animStyle === 'lengthWave' || animStyle === 'scanlineMove') {
         expr = rigBase +
-               'doAnim ? base + Math.sin(time * speed * Math.PI * 2) * amount : base;';
+               'doAnim ? base + Math.sin(((time * speed) / loopDur) * Math.PI * 2) * amount : base;';
       } else if (animStyle === 'drift') {
+        // Fix 5: rewrite comma-in-ternary to statement form
         expr = rigBase +
-               'doAnim ? (seedRandom(42, true), base + noise(time * speed) * amount) : base;';
+               'seedRandom(42, true);\n' +
+               'var driftVal = base + noise(time * speed) * amount;\n' +
+               'doAnim ? driftVal : base;';
       } else if (animStyle === 'pulse') {
         expr = rigBase +
-               'doAnim ? base + Math.pow((Math.sin(time * speed * Math.PI * 2) + 1) / 2, 3) * amount : base;';
+               'doAnim ? base + Math.pow((Math.sin(((time * speed) / loopDur) * Math.PI * 2) + 1) / 2, 3) * amount : base;';
       } else if (animStyle === 'randomFlicker') {
         expr = rigBase +
                'doAnim ? (seedRandom(Math.floor(time * speed * 12), true), base + random(-amount, amount)) : base;';
       } else if (animStyle === 'thresholdSweep') {
         // thresholdSweep applies to blur length as a stand-in for the threshold effect
         expr = rigBase +
-               'doAnim ? base + Math.sin(time * speed * Math.PI * 2) * amount : base;';
+               'doAnim ? base + Math.sin(((time * speed) / loopDur) * Math.PI * 2) * amount : base;';
       } else {
         expr = rigBase + 'base;';
       }
     } else {
       // Quick mode — bake literal values into expression
-      var base   = baseLength;
-      var speed  = animSpeed;
-      var amount = animAmount;
+      var base      = baseLength;
+      var speed     = animSpeed;
+      var amount    = animAmount;
+      var loopDur   = (params.loopDuration !== undefined && params.loopDuration > 0) ? params.loopDuration : 2;
 
       if (animStyle === 'lengthWave' || animStyle === 'scanlineMove') {
         expr = 'var base = ' + base + ';\n' +
                'var speed = ' + speed + ';\n' +
                'var amount = ' + amount + ';\n' +
-               'base + Math.sin(time * speed * Math.PI * 2) * amount;';
+               'var loopDur = ' + loopDur + ';\n' +
+               'base + Math.sin(((time * speed) / loopDur) * Math.PI * 2) * amount;';
       } else if (animStyle === 'drift') {
         expr = 'var base = ' + base + ';\n' +
                'var speed = ' + speed + ';\n' +
@@ -366,7 +388,8 @@ var Sorter = (function() {
         expr = 'var base = ' + base + ';\n' +
                'var speed = ' + speed + ';\n' +
                'var amount = ' + amount + ';\n' +
-               'base + Math.pow((Math.sin(time * speed * Math.PI * 2) + 1) / 2, 3) * amount;';
+               'var loopDur = ' + loopDur + ';\n' +
+               'base + Math.pow((Math.sin(((time * speed) / loopDur) * Math.PI * 2) + 1) / 2, 3) * amount;';
       } else if (animStyle === 'randomFlicker') {
         expr = 'var base = ' + base + ';\n' +
                'var speed = ' + speed + ';\n' +
@@ -377,7 +400,8 @@ var Sorter = (function() {
         expr = 'var base = ' + base + ';\n' +
                'var speed = ' + speed + ';\n' +
                'var amount = ' + amount + ';\n' +
-               'base + Math.sin(time * speed * Math.PI * 2) * amount;';
+               'var loopDur = ' + loopDur + ';\n' +
+               'base + Math.sin(((time * speed) / loopDur) * Math.PI * 2) * amount;';
       } else {
         expr = '' + base + ';';
       }
@@ -432,8 +456,16 @@ var Sorter = (function() {
         var feFx = effects.addProperty('ADBE Find Edges');
         if (feFx) { feFx.property('ADBE Find Edges-0001').setValue(0); } // Invert = false
         // Levels will be added by caller (thresholdLow/High already applied after this call)
+      } else if (mode === 'red') {
+        // Shift Channels: route Red channel into R/G/B so luminance == red
+        var scFxR = effects.addProperty('ADBE Shift Channels');
+        if (scFxR) {
+          scFxR.property('ADBE Shift Channels-0001').setValue(1); // R from Red
+          scFxR.property('ADBE Shift Channels-0002').setValue(1); // G from Red
+          scFxR.property('ADBE Shift Channels-0003').setValue(1); // B from Red
+        }
       }
-      // 'hue' and 'red': rely on raw luminance from Levels alone (existing behavior)
+      // 'hue': relies on raw luminance from Levels alone (documented fallback)
     } catch(e) {}
   }
 
