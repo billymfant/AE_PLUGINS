@@ -15,6 +15,7 @@
 //@include "patterns.jsx"
 //@include "physics.jsx"
 //@include "particles.jsx"
+//@include "glitchmosh.jsx"
 
 function dispatch(action, paramsJSON) {
     var params;
@@ -36,6 +37,7 @@ function dispatch(action, paramsJSON) {
         else if (action === 'patterns.generate')   result = Patterns.generate(params);
         else if (action === 'physics.simulate')    result = PhysicsRig.simulate(params);
         else if (action === 'particles.generate')  result = ParticleEngine.generate(params);
+        else if (action === 'glitchmosh.apply')    result = GlitchMosh.apply(params);
         else if (action === 'presets.save')      result = PresetsIO.save(params);
         else if (action === 'presets.list')      result = PresetsIO.list(params);
         else if (action === 'presets.get')       result = PresetsIO.get(params);
