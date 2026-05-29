@@ -297,6 +297,14 @@ var Slides = (function() {
           ));
           orderIndices.push(dist);
         }
+      } else if (animDirection === 'fromEdges') {
+        // Edges animate first: order = distance to nearest grid border (0 at edge, max at center)
+        for (i = 0; i < total; i++) {
+          var er = Math.floor(i / cols);
+          var ec = i % cols;
+          var edgeDist = Math.min(er, rows - 1 - er, ec, cols - 1 - ec);
+          orderIndices.push(edgeDist);
+        }
       } else if (animDirection === 'random') {
         var idxArr = [];
         for (i = 0; i < total; i++) { idxArr.push(i); }

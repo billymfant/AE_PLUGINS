@@ -214,6 +214,7 @@ window.SlidesUI = (function() {
         { value: 'byRow',      label: 'By Row' },
         { value: 'byColumn',   label: 'By Column' },
         { value: 'fromCenter', label: 'From Center' },
+        { value: 'fromEdges',  label: 'From Edges' },
         { value: 'random',     label: 'Random' }
       ],
       value: 'byIndex',
