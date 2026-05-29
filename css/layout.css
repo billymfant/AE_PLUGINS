@@ -69,6 +69,7 @@
 .tab-btn[data-tab="patterns"]  { --tab-color: var(--patterns-color); }
 .tab-btn[data-tab="physics"]   { --tab-color: var(--physics-color); }
 .tab-btn[data-tab="particles"] { --tab-color: var(--particles-color); }
+.tab-btn[data-tab="glitchmosh"] { --tab-color: var(--glitchmosh-color); }
 
 /* ── Plugin name bar ──────────────────────────────────────── */
 .plugin-bar {
@@ -282,6 +283,7 @@
 #pane-patterns  { --tab-color: var(--patterns-color); }
 #pane-physics   { --tab-color: var(--physics-color); }
 #pane-particles { --tab-color: var(--particles-color); }
+#pane-glitchmosh { --tab-color: var(--glitchmosh-color); }
 
 /* ── Grid helpers ───────────────────────────────────────────── */
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
