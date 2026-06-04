@@ -1,50 +1,27 @@
 'use strict';
 
 (function () {
-  var _tabs = ['slides', 'grids', 'glow', 'sorter', 'dist',
-               'colorlab', 'gradient', 'patterns', 'physics', 'particles', 'glitchmosh'];
+  // Suite reduced to 3 hero tools (2026-06-04 scope reduction).
+  // Archived tools preserved at tag archive/pre-scope-reduction-2026-06-04.
+  var _tabs = ['dist', 'colorlab', 'glow'];
 
   var _pluginNames = {
-    slides:    'Slides Generator',
-    grids:     'Grids Pro',
-    glow:      'Deep Glow',
-    sorter:    'Pixel Sorter',
     dist:      'Distortions Suite',
     colorlab:  'Color Lab',
-    gradient:  'Gradient Studio',
-    patterns:  'Pattern Pro',
-    physics:   'Physics Rig',
-    particles: 'Particle Engine',
-    glitchmosh: 'GlitchMosh'
+    glow:      'Deep Glow'
   };
 
   var _UIs = {
-    slides:    window.SlidesUI,
-    grids:     window.GridsUI,
-    glow:      window.GlowUI,
-    sorter:    window.SorterUI,
     dist:      window.DistortionsUI,
     colorlab:  window.ColorLabUI,
-    gradient:  window.GradientUI,
-    patterns:  window.PatternsUI,
-    physics:   window.PhysicsUI,
-    particles: window.ParticlesUI,
-    glitchmosh: window.GlitchMoshUI
+    glow:      window.GlowUI
   };
 
   // pluginId used for preset file namespacing
   var _pluginIds = {
-    slides:    'slides',
-    grids:     'grids',
-    glow:      'glow',
-    sorter:    'sorter',
     dist:      'distortions',
     colorlab:  'colorlab',
-    gradient:  'gradient',
-    patterns:  'patterns',
-    physics:   'physics',
-    particles: 'particles',
-    glitchmosh: 'glitchmosh'
+    glow:      'glow'
   };
 
   function init() {
