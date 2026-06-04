@@ -31,16 +31,7 @@ Slider.prototype._updateModified = function(v) {
 Slider.prototype._build = function() {
   var self  = this;
   var wrap  = Utils.el('div', { class: 'component-slider' });
-  var hdr   = Utils.el('div', { class: 'slider-header' });
   var label = Utils.el('span', { class: 'slider-label' }, this.label);
-
-  var input = document.createElement('input');
-  input.type      = 'number';
-  input.className = 'slider-input';
-  input.min       = this.min;
-  input.max       = this.max;
-  input.step      = this.step;
-  input.value     = this.value;
 
   var track = document.createElement('input');
   track.type      = 'range';
@@ -50,8 +41,17 @@ Slider.prototype._build = function() {
   track.step      = this.step;
   track.value     = this.value;
 
-  hdr.appendChild(label);
-  hdr.appendChild(input);
+  var input = document.createElement('input');
+  input.type      = 'number';
+  input.className = 'slider-input';
+  input.min       = this.min;
+  input.max       = this.max;
+  input.step      = this.step;
+  input.value     = this.value;
+
+  wrap.appendChild(label);
+  wrap.appendChild(track);
+  wrap.appendChild(input);
 
   if (this.defaultValue !== undefined) {
     var resetBtn = document.createElement('button');
@@ -63,11 +63,8 @@ Slider.prototype._build = function() {
       self.setValue(self.defaultValue);
       self.onChange(self.defaultValue);
     });
-    hdr.appendChild(resetBtn);
+    wrap.appendChild(resetBtn);
   }
-
-  wrap.appendChild(hdr);
-  wrap.appendChild(track);
 
   if (this.tooltip) wrap.setAttribute('data-tooltip', this.tooltip);
 
