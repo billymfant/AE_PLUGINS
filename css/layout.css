@@ -16,7 +16,7 @@
   border-bottom: 1px solid var(--border);
   padding: 0;
   gap: 0;
-  height: 38px;
+  height: 46px;
 }
 
 .tab-btn {
@@ -34,8 +34,13 @@
   position: relative;
 }
 
-/* Hide text labels — icons only with title tooltips */
-.tab-btn { font-size: 0; }
+/* Icon over short text label (room for labels with only 3 tabs) */
+.tab-btn {
+  font-size: 9.5px;
+  gap: 4px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
 .tab-btn svg {
   width: 15px;
@@ -192,8 +197,8 @@
 }
 
 .action-btn:hover {
-  filter: brightness(1.15);
-  box-shadow: 0 0 16px rgba(255,255,255,0.08), 0 1px 0 rgba(0,0,0,0.4);
+  filter: brightness(1.12);
+  box-shadow: 0 3px 14px var(--tab-glow, rgba(255,255,255,0.12)), 0 1px 0 rgba(0,0,0,0.4);
 }
 .action-btn:active { opacity: 0.8; transform: translateY(1px); box-shadow: none; filter: none; }
 .action-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
