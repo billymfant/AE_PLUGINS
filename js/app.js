@@ -77,6 +77,8 @@
 
       ui.init(controls);
 
+      if (window.Sections) Sections.makeCollapsible(controls);
+
       var bar = new PresetBar({
         pluginId: pluginId,
         getParams: (function (u) {
