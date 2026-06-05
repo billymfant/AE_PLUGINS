@@ -44,6 +44,24 @@ static Image lumaRamp(int W,int H){               // horizontal black->white ram
     return im;
 }
 
+static void test_downsample_dims_and_energy() {
+    Image src = whiteSquare(64,64,16);
+    Image half = downsampleHalf(src);
+    CHECK(half.w==32 && half.h==32);
+    // energy per unit area roughly preserved (within 25%): downsample averages.
+    float eFull = energy(src), eHalf = energy(half);
+    CHECK(eHalf > eFull*0.25f*0.6f && eHalf < eFull*0.25f*1.4f);
+}
+static void test_upsample_adds_and_spreads() {
+    Image src = whiteSquare(64,64,16);
+    Image half = downsampleHalf(src);
+    Image acc(64,64);                         // zero
+    upsampleAdd(half, acc, 1.0f, DIM_BOTH);
+    // a pixel just OUTSIDE the original square edge should now be non-zero (spread happened)
+    int x0=(64-16)/2, y0=32;
+    CHECK(acc.at(x0-1, y0)[0] > 0.0f);
+}
+
 static void test_AC1_threshold_direction() {
     // AC1: raising the threshold must monotonically REDUCE extracted energy (guards the
     // inverted/mis-scaled-threshold bug). A pure-white square can't show this — every
@@ -63,6 +81,8 @@ int main() {
     test_luma();
     test_bilinear_center();
     test_AC1_threshold_direction();
+    test_downsample_dims_and_energy();
+    test_upsample_adds_and_spreads();
     if (g_fail) { printf("%d CHECK(s) failed\n", g_fail); return 1; }
     printf("ALL TESTS PASSED\n"); return 0;
 }

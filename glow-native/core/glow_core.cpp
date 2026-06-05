@@ -45,4 +45,49 @@ Image extractBright(const Image& src, const Params& p) {
     return out;
 }
 
+Image downsampleHalf(const Image& s) {
+    int w = (s.w+1)/2, h = (s.h+1)/2;
+    Image d(w,h);
+    for (int y=0;y<h;++y) for (int x=0;x<w;++x){
+        // sample source at the center of this dest texel, in source pixel coords
+        float cx = (x+0.5f)*2.0f, cy = (y+0.5f)*2.0f;
+        float acc[4]={0,0,0,0};
+        // 13-tap weights (Jimenez/CoD): center group + ring; normalized below.
+        const float o = 1.0f; // one source pixel
+        struct T{float dx,dy,w;};
+        const T taps[13]={
+            {-2,-2,0.03125f},{0,-2,0.0625f},{2,-2,0.03125f},
+            {-1,-1,0.125f},{1,-1,0.125f},
+            {-2,0,0.0625f},{0,0,0.125f},{2,0,0.0625f},
+            {-1,1,0.125f},{1,1,0.125f},
+            {-2,2,0.03125f},{0,2,0.0625f},{2,2,0.03125f}
+        };
+        float wsum=0; float t[4];
+        for (const T& tp: taps){ sampleBilinear(s, cx+tp.dx*o, cy+tp.dy*o, t);
+            acc[0]+=t[0]*tp.w; acc[1]+=t[1]*tp.w; acc[2]+=t[2]*tp.w; acc[3]+=t[3]*tp.w; wsum+=tp.w; }
+        float inv = wsum>0?1.0f/wsum:0.0f;
+        float* dd=d.at(x,y); dd[0]=acc[0]*inv; dd[1]=acc[1]*inv; dd[2]=acc[2]*inv; dd[3]=acc[3]*inv;
+    }
+    return d;
+}
+
+void upsampleAdd(const Image& low, Image& hi, float weight, int dimensions) {
+    float sx = (dimensions==DIM_VERTICAL)   ? 0.0f : 1.0f;  // anamorphic: kill horizontal spread
+    float sy = (dimensions==DIM_HORIZONTAL) ? 0.0f : 1.0f;  // kill vertical spread
+    for (int y=0;y<hi.h;++y) for (int x=0;x<hi.w;++x){
+        // map hi texel center into low-res pixel coords
+        float lx = (x+0.5f) * (float)low.w / (float)hi.w;
+        float ly = (y+0.5f) * (float)low.h / (float)hi.h;
+        // 9-tap tent (offsets in low-res pixels), squashed per anamorphic axis
+        const float c=4.f/16, e=2.f/16, k=1.f/16;
+        struct T{float dx,dy,w;};
+        const T taps[9]={{-1,-1,k},{0,-1,e},{1,-1,k},{-1,0,e},{0,0,c},{1,0,e},{-1,1,k},{0,1,e},{1,1,k}};
+        float acc[4]={0,0,0,0}, t[4];
+        for (const T& tp: taps){ sampleBilinear(low, lx+tp.dx*sx, ly+tp.dy*sy, t);
+            acc[0]+=t[0]*tp.w; acc[1]+=t[1]*tp.w; acc[2]+=t[2]*tp.w; acc[3]+=t[3]*tp.w; }
+        float* hh=hi.at(x,y);
+        hh[0]+=acc[0]*weight; hh[1]+=acc[1]*weight; hh[2]+=acc[2]*weight; hh[3]+=acc[3]*weight;
+    }
+}
+
 } // namespace glow
