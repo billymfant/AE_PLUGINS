@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <math.h>
+
 /* ------------------------------------------------------------------ *
  *  Versioning (shown in About + used by AE for effect cache keys)
  * ------------------------------------------------------------------ */
@@ -46,6 +48,11 @@ enum {
     DG_DIMENSIONS,         /* popup  Both/Horiz/Vert (default Both=1)   */
     DG_GLOW_ONLY,          /* checkbox            (default off)         */
 
+    /* --- cinematic params (v1 §4) --------------------------------- */
+    DG_LINEAR_LIGHT,       /* checkbox            (default ON)          */
+    DG_TONEMAP,            /* popup  None/Soft-clip/Filmic (default 2)  */
+    DG_HIGHLIGHT_COMP,     /* float     0..100    (default 0)           */
+
     DG_NUM_PARAMS          /* keep last */
 };
 
@@ -53,6 +60,7 @@ enum {
 #define DG_FALLOFF_CHOICES     "Linear|Soft|Exponential"
 #define DG_BLEND_OP_CHOICES    "Add|Screen"
 #define DG_DIMENSIONS_CHOICES  "Both|Horizontal|Vertical"
+#define DG_TONEMAP_CHOICES     "None|Soft-clip|Filmic"
 
 /* Falloff enum (1-based to match AE popup values) */
 enum { DG_FALLOFF_LINEAR = 1, DG_FALLOFF_SOFT, DG_FALLOFF_EXP };
@@ -60,6 +68,8 @@ enum { DG_FALLOFF_LINEAR = 1, DG_FALLOFF_SOFT, DG_FALLOFF_EXP };
 enum { DG_BLEND_ADD = 1, DG_BLEND_SCREEN };
 /* Dimensions enum */
 enum { DG_DIM_BOTH = 1, DG_DIM_HORIZONTAL, DG_DIM_VERTICAL };
+/* Tonemap enum (1-based to match AE popup values) */
+enum { DG_TONEMAP_NONE = 1, DG_TONEMAP_SOFTCLIP, DG_TONEMAP_FILMIC };
 
 /* ------------------------------------------------------------------ *
  *  GlowParams  —  shared with CUDA  (plain data, no AE types)
@@ -81,6 +91,10 @@ typedef struct {
     int    blendOp;          /* DG_BLEND_*                              */
     int    dimensions;       /* DG_DIM_*                                */
     int    glowOnly;         /* 0/1                                     */
+
+    int    linearLight;      /* 0/1   (cinematic: work in linear light) */
+    int    tonemap;          /* DG_TONEMAP_*                            */
+    float  highlightComp;    /* 0..1  (already / 100 from the %)        */
 
     int    width;            /* buffer dims (pixels)                    */
     int    height;

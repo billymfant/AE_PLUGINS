@@ -38,5 +38,14 @@ build/
 # Adobe AE SDK (vendored locally, not part of the repo)
 AfterEffectsSDK_*/
 
+# AE native plugin: SDK sample reference copy (read-only, not part of repo)
+glow-native/ae-sample-ref/
+
+# AE native plugin: build intermediates + outputs
+glow-native/ae/x64/
+glow-native/build-ae/
+# PiPL .rc is generated from the .r during the build
+glow-native/ae/*.rc
+
 # Visual companion brainstorm sessions
 .superpowers/

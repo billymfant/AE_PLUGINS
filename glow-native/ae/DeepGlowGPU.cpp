@@ -1,69 +1,90 @@
 /*
  *  DeepGlowGPU.cpp
- *  Native After Effects entry point for Deep Glow (C++ / CUDA).
+ *  Native After Effects entry point for Deep Glow.
  *
- *  This is a Smart FX (PF_OutFlag2_SUPPORTS_SMART_RENDER) effect that also
- *  advertises GPU support (PF_OutFlag2_SUPPORTS_GPU_RENDER_F32). AE calls:
+ *  MILESTONE M0 (this file): a LOADABLE Smart-FX shell.
+ *  --------------------------------------------------------------------
+ *  This is the de-risking build: PiPL + dispatch + a PASSTHROUGH render
+ *  (output == input, image unchanged). It declares the full v1 param set
+ *  (incl. the 3 cinematic params) so the UI is final, but does NO image
+ *  processing yet. The CPU path is wired to core::bloom in Task 10 and
+ *  CUDA in Task 11; until then the GPU/CUDA code is intentionally NOT
+ *  compiled in (no SUPPORTS_GPU_RENDER_F32 flag, no .cu in the build).
  *
- *      GLOBAL_SETUP        -> advertise flags, version
- *      PARAMS_SETUP        -> add UI params (mirrors jsx/glow.jsx)
- *      GPU_DEVICE_SETUP    -> per-device init (load CUDA module/stream)
- *      SMART_PRE_RENDER    -> checkout input, declare needed region
- *      SMART_RENDER        -> CPU fallback (Adobe-required)
- *      SMART_RENDER_GPU    -> the real path: orchestrate CUDA passes
- *      GPU_DEVICE_SETDOWN  -> per-device teardown
+ *  AE command flow used here:
+ *      ABOUT             -> version string
+ *      GLOBAL_SETUP      -> advertise flags (Smart + float, NO GPU)
+ *      PARAMS_SETUP      -> add UI params (mirrors jsx/glow.jsx + cinematic)
+ *      SMART_PRE_RENDER  -> checkout input, union result rects
+ *      SMART_RENDER      -> copy input world -> output world (passthrough)
  *
- *  STATUS: scaffold. Compiles once the AE SDK headers + CUDA are on the
- *  include path (see README). Sections needing SDK-version verification are
- *  marked  // VERIFY .  The CPU path is real (simplified); the GPU path
- *  orchestration is wired to the launchers in DeepGlowGPU.cu.
+ *  Modeled on the SDK's SDK_Invert_ProcAmp sample (GPU bits removed).
  */
 
+#include "DeepGlowGPU.h"
+
 #include "AEConfig.h"
+#include "entry.h"
+#include "AEFX_SuiteHelper.h"
 #include "AE_Effect.h"
 #include "AE_EffectCB.h"
-#include "AE_Macros.h"
-#include "Param_Utils.h"
 #include "AE_EffectCBSuites.h"
-#include "AE_EffectSuites.h"
-#include "AE_EffectGPUSuites.h"     // PF_GPUDeviceSuite1, world suites  // VERIFY
+#include "AE_Macros.h"
+#include "AE_PluginData.h"
+#include "Param_Utils.h"
+#include "Smart_Utils.h"        // UnionLRect
 #include "String_Utils.h"
 
-#include "DeepGlowGPU.h"
-#include <cuda_runtime.h>
-#include <math.h>
+#include <string.h>
 
-/* ---- launchers implemented in DeepGlowGPU.cu ---------------------- */
-extern "C" {
-    void DG_LaunchThreshold(const float4*, float4*, const GlowParams*, cudaStream_t);
-    void DG_LaunchBlur     (const float4*, float4*, const GlowParams*, int, int, float, cudaStream_t);
-    void DG_LaunchComposite(const float4*, const float4*, float4*, const GlowParams*, float, cudaStream_t);
-}
 
 /* ================================================================== *
- *  GLOBAL_SETUP — advertise capabilities
+ *  ABOUT
  * ================================================================== */
-static PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
-                          PF_ParamDef* params[], PF_LayerDef* output)
+static PF_Err
+About(PF_InData* in_data, PF_OutData* out_data,
+      PF_ParamDef* params[], PF_LayerDef* output)
 {
-    out_data->my_version = PF_VERSION(DG_MAJOR_VERSION, DG_MINOR_VERSION,
-                                      DG_BUG_VERSION, DG_STAGE_VERSION, DG_BUILD_VERSION);
-
-    out_data->out_flags  = PF_OutFlag_DEEP_COLOR_AWARE |
-                           PF_OutFlag_PIX_INDEPENDENT |
-                           PF_OutFlag_I_EXPAND_BUFFER;          // glow grows the frame
-
-    out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
-                           PF_OutFlag2_FLOAT_COLOR_AWARE |
-                           PF_OutFlag2_SUPPORTS_GPU_RENDER_F32; // 32-bit float GPU  // VERIFY
+    PF_SPRINTF(out_data->return_msg,
+               "%s, v%d.%d\r%s",
+               DG_NAME, DG_MAJOR_VERSION, DG_MINOR_VERSION, DG_DESCRIPTION);
     return PF_Err_NONE;
 }
 
+
 /* ================================================================== *
- *  PARAMS_SETUP — UI (order must match the DG_* enum)
+ *  GLOBAL_SETUP — advertise capabilities
+ *  NOTE: out_flags / out_flags2 MUST match the PiPL hex values:
+ *      out_flags  = PIX_INDEPENDENT | DEEP_COLOR_AWARE        = 0x2000400
+ *      out_flags2 = SMART_RENDER | FLOAT_COLOR_AWARE
+ *                   | SUPPORTS_THREADED_RENDERING             = 0x8001400
+ *  GPU flags are deliberately omitted at M0.
  * ================================================================== */
-static PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data,
-                          PF_ParamDef* params[], PF_LayerDef* output)
+static PF_Err
+GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
+            PF_ParamDef* params[], PF_LayerDef* output)
+{
+    out_data->my_version = PF_VERSION(DG_MAJOR_VERSION, DG_MINOR_VERSION,
+                                      DG_BUG_VERSION, DG_STAGE_VERSION,
+                                      DG_BUILD_VERSION);
+
+    out_data->out_flags  = PF_OutFlag_PIX_INDEPENDENT |
+                           PF_OutFlag_DEEP_COLOR_AWARE;
+
+    out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
+                           PF_OutFlag2_FLOAT_COLOR_AWARE |
+                           PF_OutFlag2_SUPPORTS_THREADED_RENDERING;
+
+    return PF_Err_NONE;
+}
+
+
+/* ================================================================== *
+ *  PARAMS_SETUP — UI (order must match the DG_* enum in the header)
+ * ================================================================== */
+static PF_Err
+ParamsSetup(PF_InData* in_data, PF_OutData* out_data,
+            PF_ParamDef* params[], PF_LayerDef* output)
 {
     PF_Err       err = PF_Err_NONE;
     PF_ParamDef  def;
@@ -117,90 +138,132 @@ static PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data,
     AEFX_CLR_STRUCT(def);
     PF_ADD_CHECKBOX("Glow Only", "", FALSE, 0, DG_GLOW_ONLY);
 
+    /* --- cinematic params (v1 §4) ---------------------------------- */
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_CHECKBOX("Linear Light", "", TRUE, 0, DG_LINEAR_LIGHT);
+
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_POPUP("Tonemap", 3, DG_TONEMAP_SOFTCLIP, DG_TONEMAP_CHOICES, DG_TONEMAP);
+
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Highlight Compression", 0, 100, 0, 100, 0,
+                         PF_Precision_INTEGER, 0, 0, DG_HIGHLIGHT_COMP);
+
     out_data->num_params = DG_NUM_PARAMS;
     return err;
 }
 
-/* ------------------------------------------------------------------ *
- *  Fill a GlowParams from the checked-out AE params (normalized units).
- * ------------------------------------------------------------------ */
-static void ReadParams(PF_ParamDef* params[], GlowParams* g)
-{
-    g->intensity     = params[DG_INTENSITY]->u.fs_d.value / 100.0f;
-    g->radius        = (float)params[DG_RADIUS]->u.fs_d.value;
-    g->threshold     = params[DG_THRESHOLD]->u.fs_d.value / 255.0f;
-    g->thresholdSoft = params[DG_THRESHOLD_SOFT]->u.fs_d.value / 100.0f;
-    g->sourceGain    = params[DG_SOURCE_GAIN]->u.fs_d.value / 100.0f;
-
-    g->glowR = params[DG_GLOW_COLOR]->u.cd.value.red   / 255.0f;
-    g->glowG = params[DG_GLOW_COLOR]->u.cd.value.green / 255.0f;
-    g->glowB = params[DG_GLOW_COLOR]->u.cd.value.blue  / 255.0f;
-
-    g->colorize    = params[DG_COLORIZE]->u.bd.value;
-    g->saturation  = (float)(params[DG_SATURATION]->u.fs_d.value / 100.0);
-    g->hueShift    = (float)(params[DG_HUE_SHIFT]->u.fs_d.value * 3.14159265358979 / 180.0);
-    g->passes      = params[DG_PASSES]->u.sd.value;
-    g->falloff     = params[DG_FALLOFF]->u.pd.value;
-    g->blendOp     = params[DG_BLEND_OP]->u.pd.value;
-    g->dimensions  = params[DG_DIMENSIONS]->u.pd.value;
-    g->glowOnly    = params[DG_GLOW_ONLY]->u.bd.value;
-}
 
 /* ================================================================== *
- *  GPU RENDER — the real path. Orchestrates the CUDA passes.
- *  AE hands us device pointers (already on the GPU) for src/dst.
+ *  SMART_PRE_RENDER — checkout input, declare needed region.
+ *  At M0 we request exactly the output region (no buffer expansion);
+ *  Task 10/12 will expand by the max blur radius across passes.
  * ================================================================== */
-static PF_Err SmartRenderGPU(PF_InData* in_data, PF_OutData* out_data,
-                             void* extraP)  // PF_GPUDeviceSuite world  // VERIFY
+static PF_Err
+PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
+{
+    PF_Err            err = PF_Err_NONE;
+    PF_CheckoutResult in_result;
+    PF_RenderRequest  req = extraP->input->output_request;
+
+    ERR(extraP->cb->checkout_layer(in_data->effect_ref,
+                                   DG_INPUT,
+                                   DG_INPUT,
+                                   &req,
+                                   in_data->current_time,
+                                   in_data->time_step,
+                                   in_data->time_scale,
+                                   &in_result));
+
+    if (!err) {
+        UnionLRect(&in_result.result_rect,     &extraP->output->result_rect);
+        UnionLRect(&in_result.max_result_rect, &extraP->output->max_result_rect);
+    }
+    return err;
+}
+
+
+/* ================================================================== *
+ *  Passthrough copy: input world -> output world.
+ *  Copies the overlapping region row by row, byte for byte, so it is
+ *  pixel-format agnostic (8/16/32-bit deep color all just work).
+ * ================================================================== */
+static PF_Err
+CopyInputToOutput(PF_InData* in_data, PF_OutData* out_data,
+                  PF_EffectWorld* input_worldP, PF_EffectWorld* output_worldP)
 {
     PF_Err err = PF_Err_NONE;
 
-    // VERIFY: pull src/dst float4* device ptrs + dims/pitch from the GPU
-    //         suite (PF_SmartRenderExtra / PF_GPUDeviceSuite1). Pseudocode:
-    //   float4* d_src = ...; float4* d_dst = ...;
-    //   GlowParams g; ReadParams(params, &g); g.width=..; g.height=..; ...
-    //   cudaStream_t stream = (cudaStream_t)device_info.command_queuePV;
-    //
-    // Scratch buffers (ping/pong + accumulate) allocated once per device:
-    //   float4* d_extract; float4* d_blurTmp; float4* d_accum;
-    //
-    // Orchestration (host loop over passes, kernels run on device):
-    //   cudaMemsetAsync(d_accum, 0, bytes, stream);
-    //   for (int pass = 0; pass < g.passes; ++pass) {
-    //       float w = DG_PassScale(pass, g.passes, g.falloff);
-    //       float r = g.radius * DG_PassRadiusFactor(pass);
-    //       DG_LaunchThreshold(d_src, d_extract, &g, stream);
-    //       int hx = (g.dimensions != DG_DIM_VERTICAL)   ? 1 : 0;
-    //       int vy = (g.dimensions != DG_DIM_HORIZONTAL) ? 1 : 0;
-    //       if (hx) DG_LaunchBlur(d_extract, d_blurTmp, &g, 1, 0, r, stream);
-    //       if (vy) DG_LaunchBlur(hx ? d_blurTmp : d_extract, d_extract, &g, 0, 1, r, stream);
-    //       DG_LaunchComposite(d_accum, d_extract, d_accum, &g, w, stream);  // accumulate
-    //   }
-    //   // final composite of accum over source -> d_dst
-    //
-    // The exact AE GPU-suite plumbing (world->device-ptr, pitch, stream) is
-    // SDK-version specific; the ProcAmp GPU sample in the AE SDK is the
-    // reference. Left as VERIFY until the SDK is on this machine.
+    if (!input_worldP || !output_worldP) {
+        return PF_Err_BAD_CALLBACK_PARAM;
+    }
+
+    const A_long copy_h = MIN(input_worldP->height, output_worldP->height);
+    const A_long copy_w_bytes = MIN(input_worldP->rowbytes, output_worldP->rowbytes);
+
+    const char* srcRow = reinterpret_cast<const char*>(input_worldP->data);
+    char*       dstRow = reinterpret_cast<char*>(output_worldP->data);
+
+    for (A_long y = 0; y < copy_h; ++y) {
+        memcpy(dstRow, srcRow, static_cast<size_t>(copy_w_bytes));
+        srcRow += input_worldP->rowbytes;
+        dstRow += output_worldP->rowbytes;
+    }
 
     return err;
 }
 
+
 /* ================================================================== *
- *  CPU RENDER — Adobe-required fallback. Real (simplified) glow so the
- *  plugin produces output even before the GPU path is finalized.
- *  NOTE: operates on the checked-out input world; full Smart-render
- *  checkout/checkin plumbing marked VERIFY.
+ *  SMART_RENDER — passthrough. Checkout in/out worlds, copy, check in.
  * ================================================================== */
-static PF_Err SmartRenderCPU(PF_InData* in_data, PF_OutData* out_data,
-                             PF_ParamDef* params[], PF_LayerDef* output)
+static PF_Err
+SmartRender(PF_InData* in_data, PF_OutData* out_data, PF_SmartRenderExtra* extraP)
 {
-    PF_Err err = PF_Err_NONE;
-    // VERIFY: checkout input via PF_Checkout_Layer / SmartRender extra,
-    //         iterate float pixels, run the same threshold->separable-blur->
-    //         composite math as the .cu kernels on the CPU. Mirror the device
-    //         math in DeepGlowGPU.cu exactly so CPU/GPU output matches.
-    return err;
+    PF_Err err  = PF_Err_NONE;
+    PF_Err err2 = PF_Err_NONE;
+
+    PF_EffectWorld* input_worldP  = NULL;
+    PF_EffectWorld* output_worldP = NULL;
+
+    ERR(extraP->cb->checkout_layer_pixels(in_data->effect_ref, DG_INPUT, &input_worldP));
+    ERR(extraP->cb->checkout_output(in_data->effect_ref, &output_worldP));
+
+    if (!err) {
+        ERR(CopyInputToOutput(in_data, out_data, input_worldP, output_worldP));
+    }
+
+    err2 = extraP->cb->checkin_layer_pixels(in_data->effect_ref, DG_INPUT);
+    return err ? err : err2;
 }
+
+
+/* ================================================================== *
+ *  Registration entry point (required for the host to load the effect)
+ * ================================================================== */
+extern "C" DllExport
+PF_Err PluginDataEntryFunction2(
+    PF_PluginDataPtr   inPtr,
+    PF_PluginDataCB2   inPluginDataCallBackPtr,
+    SPBasicSuite*      inSPBasicSuitePtr,
+    const char*        inHostName,
+    const char*        inHostVersion)
+{
+    PF_Err result = PF_Err_INVALID_CALLBACK;
+
+    result = PF_REGISTER_EFFECT_EXT2(
+        inPtr,
+        inPluginDataCallBackPtr,
+        DG_NAME,                                 // Name
+        "DKVB DeepGlowGPU",                      // Match Name (must match PiPL)
+        DG_CATEGORY,                             // Category
+        AE_RESERVED_INFO,                        // Reserved Info
+        "EffectMain",                            // Entry point
+        "https://github.com/billymfant/AE_PLUGINS"); // support URL
+
+    return result;
+}
+
 
 /* ================================================================== *
  *  EffectMain — AE command dispatcher
@@ -212,22 +275,23 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data,
     PF_Err err = PF_Err_NONE;
     try {
         switch (cmd) {
+            case PF_Cmd_ABOUT:
+                err = About(in_data, out_data, params, output);
+                break;
             case PF_Cmd_GLOBAL_SETUP:
-                err = GlobalSetup(in_data, out_data, params, output); break;
+                err = GlobalSetup(in_data, out_data, params, output);
+                break;
             case PF_Cmd_PARAMS_SETUP:
-                err = ParamsSetup(in_data, out_data, params, output); break;
-            case PF_Cmd_GPU_DEVICE_SETUP:
-                /* VERIFY: load CUDA module, create stream, alloc scratch */ break;
-            case PF_Cmd_GPU_DEVICE_SETDOWN:
-                /* VERIFY: free scratch, destroy stream */ break;
+                err = ParamsSetup(in_data, out_data, params, output);
+                break;
             case PF_Cmd_SMART_PRE_RENDER:
-                /* VERIFY: checkout input, set result/max_result rects
-                   expanded by max blur radius across passes */ break;
+                err = PreRender(in_data, out_data, reinterpret_cast<PF_PreRenderExtra*>(extra));
+                break;
             case PF_Cmd_SMART_RENDER:
-                err = SmartRenderCPU(in_data, out_data, params, output); break;
-            case PF_Cmd_SMART_RENDER_GPU:
-                err = SmartRenderGPU(in_data, out_data, extra); break;
-            default: break;
+                err = SmartRender(in_data, out_data, reinterpret_cast<PF_SmartRenderExtra*>(extra));
+                break;
+            default:
+                break;
         }
     } catch (PF_Err& thrown) {
         err = thrown;
