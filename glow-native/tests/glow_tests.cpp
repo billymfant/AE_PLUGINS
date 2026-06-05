@@ -102,6 +102,29 @@ static void test_AC3_source_preserved() {
     CHECK(g.at(32,32)[0] >= 1.0f - 1e-3f);
 }
 
+static void test_glow_alpha_over_transparent() {
+    // Bright square on a TRANSPARENT background (alpha 0 outside the square).
+    // In composited (not glow-only) mode the halo outside the square must be
+    // VISIBLE -> output alpha > 0 there. Regression: alpha used to be copied
+    // straight from the (transparent) source, hiding the halo in AE on shape/
+    // text layers. whiteSquare can't catch this (its background alpha is 1).
+    Image src(64,64);
+    int sq=16, x0=(64-sq)/2, y0=(64-sq)/2;
+    for(int y=0;y<64;++y)for(int x=0;x<64;++x){
+        bool in = (x>=x0 && x<x0+sq && y>=y0 && y<y0+sq);
+        float* px=src.at(x,y);
+        px[0]=px[1]=px[2]= in?1.f:0.f;
+        px[3]= in?1.f:0.f;                 // transparent outside the square
+    }
+    Params p; p.threshold=0.10f; p.thresholdSoft=0.05f; p.radius=20.f;
+    p.glowOnly=false; p.blendOp=BLEND_ADD; p.linearLight=false; p.tonemap=TONE_NONE;
+    Image g = bloom(src, p);
+    int x=x0+sq+1, y=32;                    // just outside the square edge
+    CHECK(g.at(x,y)[0] > 0.001f);           // halo color present
+    CHECK(g.at(x,y)[3] > 0.001f);           // halo is VISIBLE (alpha raised)
+    CHECK(g.at(32,32)[3] >= 1.0f - 1e-3f);  // opaque interior stays opaque
+}
+
 int main() {
     test_luma();
     test_bilinear_center();
@@ -110,6 +133,7 @@ int main() {
     test_upsample_adds_and_spreads();
     test_AC2_soft_round_falloff();
     test_AC3_source_preserved();
+    test_glow_alpha_over_transparent();
     if (g_fail) { printf("%d CHECK(s) failed\n", g_fail); return 1; }
     printf("ALL TESTS PASSED\n"); return 0;
 }

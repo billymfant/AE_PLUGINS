@@ -145,8 +145,14 @@ Image bloom(const Image& src, const Params& p) {
         else if (p.blendOp==BLEND_SCREEN){
             r=1.f-(1.f-s[0])*(1.f-clampf(gr,0,1)); g=1.f-(1.f-s[1])*(1.f-clampf(gg,0,1)); b=1.f-(1.f-s[2])*(1.f-clampf(gb,0,1));
         } else { r=s[0]+gr; g=s[1]+gg; b=s[2]+gb; }
+        // Output alpha must include the glow's own coverage, or the halo is
+        // invisible wherever the source is transparent (alpha 0). Glow-only
+        // shows the glow alpha directly; composited mode raises the source
+        // alpha by the glow coverage ("over").
+        float gA = clampf(glow.at(x,y)[3], 0.f, 1.f);
         float* o=out.at(x,y);
-        o[0]=r; o[1]=g; o[2]=b; o[3]=p.glowOnly? clampf(glow.at(x,y)[3],0,1) : s[3];
+        o[0]=r; o[1]=g; o[2]=b;
+        o[3]= p.glowOnly ? gA : clampf(s[3] + gA*(1.f - s[3]), 0.f, 1.f);
     }
 
     // 5. optional de-linearize
