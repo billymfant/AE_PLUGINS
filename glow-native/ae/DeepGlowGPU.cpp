@@ -365,10 +365,19 @@ ImageToWorld(const glow::Image& img, PF_EffectWorld* w, PF_PixelFormat fmt,
 
 /* ================================================================== *
  *  SMART_PRE_RENDER — checkout input, declare needed region.
- *  We outset the requested input region AND the result rects by the
- *  glow radius (margin = ceil(radius), conservative) so the bloom can
- *  gather source from beyond the output region and extend past the
- *  layer edge instead of clipping.
+ *
+ *  We request exactly AE's output region and report a result_rect that
+ *  does NOT exceed it. AE strictly forbids result_rect > request rect in
+ *  pre-render (error 25::237) — an earlier version outset the result rect
+ *  by the glow radius and hit exactly that. Input and output worlds are
+ *  aligned here (origin 0), which the M0 passthrough confirmed renders
+ *  correctly, so SmartRender maps 1:1.
+ *
+ *  DEFERRED: gathering source from beyond the output region and letting
+ *  the glow bleed past the layer's own bounds requires the buffer-
+ *  expansion path (PF_OutFlag_I_EXPAND_BUFFER + matching PiPL flag); it
+ *  is a later look-pass enhancement, not needed for a correct in-bounds
+ *  glow. Within-layer / within-comp glow renders fully without it.
  * ================================================================== */
 static PF_Err
 PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
@@ -376,28 +385,6 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
     PF_Err            err = PF_Err_NONE;
     PF_CheckoutResult in_result;
     PF_RenderRequest  req = extraP->input->output_request;
-
-    // Read just the Radius param to size the expansion margin.
-    PF_ParamDef radius_param;
-    AEFX_CLR_STRUCT(radius_param);
-    A_long margin = 0;
-    if (!PF_CHECKOUT_PARAM(in_data, DG_RADIUS,
-                           in_data->current_time, in_data->time_step,
-                           in_data->time_scale, &radius_param)) {
-        double r = radius_param.u.fs_d.value;
-        margin = (A_long)ceil(r > 0 ? r : 0);
-        PF_CHECKIN_PARAM(in_data, &radius_param);
-    }
-
-    // Outset the requested input rect by the margin on every side so the
-    // engine has source pixels beyond the visible output region.
-    if (req.rect.left > req.rect.right) { /* empty/invalid: leave as-is */ }
-    else {
-        req.rect.left   -= margin;
-        req.rect.top    -= margin;
-        req.rect.right  += margin;
-        req.rect.bottom += margin;
-    }
 
     ERR(extraP->cb->checkout_layer(in_data->effect_ref,
                                    DG_INPUT,
@@ -409,15 +396,8 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
                                    &in_result));
 
     if (!err) {
-        // Outset our own result rects by the margin so the glow can extend
-        // past the layer edge (otherwise AE would clip it to the source).
-        PF_LRect outR = in_result.result_rect;
-        PF_LRect maxR = in_result.max_result_rect;
-        outR.left -= margin; outR.top -= margin; outR.right += margin; outR.bottom += margin;
-        maxR.left -= margin; maxR.top -= margin; maxR.right += margin; maxR.bottom += margin;
-
-        UnionLRect(&outR, &extraP->output->result_rect);
-        UnionLRect(&maxR, &extraP->output->max_result_rect);
+        UnionLRect(&in_result.result_rect,     &extraP->output->result_rect);
+        UnionLRect(&in_result.max_result_rect, &extraP->output->max_result_rect);
     }
     return err;
 }
