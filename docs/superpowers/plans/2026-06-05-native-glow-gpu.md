@@ -52,17 +52,19 @@ The existing scaffold files (`glow-native/DeepGlowGPU.{h,cpp,cu}`, first sketch)
 **Files:**
 - Create: `glow-native/CMakeLists.txt`
 - Create: `glow-native/cli/stb_image.h`, `glow-native/cli/stb_image_write.h` (download vendored)
-- Move: `glow-native/DeepGlowGPU.{h,cpp,cu}` → `glow-native/ae/` (the first-sketch AE shell + kernels become the starting point for the `ae/` plugin in M0/M2; the math is re-homed into `core/`)
 
-- [ ] **Step 1: Move the scaffold into `ae/`** (keep the AE dispatch/ParamsSetup/kernels as a base, don't throw them away)
+> **Already done (folder structure pre-organized):** the `core/ cli/ tests/ ae/` folders
+> exist (each with a short README), and the first-sketch scaffold is already at
+> `glow-native/ae/DeepGlowGPU.{h,cpp,cu}`. Its old `GlowParams` POD is superseded by
+> `core::Params`; Task 10 repurposes `ae/DeepGlowGPU.h` to hold only the AE param enum +
+> the `ReadParams → core::Params` bridge.
+
+- [ ] **Step 1: Verify the structure** (no move needed)
 
 ```bash
-mkdir -p glow-native/ae
-git mv glow-native/DeepGlowGPU.h   glow-native/ae/DeepGlowGPU.h
-git mv glow-native/DeepGlowGPU.cpp glow-native/ae/DeepGlowGPU.cpp
-git mv glow-native/DeepGlowGPU.cu  glow-native/ae/DeepGlowGPU.cu
+ls glow-native/ae glow-native/core glow-native/cli glow-native/tests
 ```
-Note: `ae/DeepGlowGPU.h`'s old `GlowParams` POD is superseded by `core::Params`; in Task 10 it's repurposed to hold only the AE param enum + the `ReadParams → core::Params` bridge.
+Expected: `ae/` has `DeepGlowGPU.{h,cpp,cu}` + `README.md`; the others have `README.md`.
 
 - [ ] **Step 2: Vendor stb single-header libs** (public domain PNG load/write)
 
@@ -103,7 +105,7 @@ add_test(NAME glow_tests COMMAND glow_tests)
 
 ```bash
 git add glow-native/CMakeLists.txt glow-native/cli/stb_image.h glow-native/cli/stb_image_write.h
-git commit -m "build(glow-native): cmake skeleton + vendored stb PNG I/O; drop first-sketch scaffold"
+git commit -m "build(glow-native): cmake skeleton + vendored stb PNG I/O"
 ```
 
 ---

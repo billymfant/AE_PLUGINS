@@ -1,98 +1,63 @@
-# Deep Glow — Native GPU Plugin (C++ / CUDA / AE SDK)
+# Deep Glow Native — GPU bloom plugin for After Effects (C++ / CUDA / AE SDK)
 
-A real compiled After Effects effect (`.aex`) that computes its own multi-pass glow
-on the GPU. **Not** an ExtendScript wrapper around AE's built-in effects — this does
-its own image math. See `../docs/handoffs/2026-06-05-native-glow-gpu-handoff.md` for
-the why and the project history.
+A real compiled AE effect (`.aex`) that computes its own GPU-accelerated cinematic bloom —
+**not** an ExtendScript panel wiring up AE's built-in effects. Commercial-grade, Windows-first.
+
+> **Starting a fresh session? Read these two first, in order:**
+> 1. **Spec** — `../docs/superpowers/specs/2026-06-05-native-glow-gpu-design.md`
+> 2. **Implementation plan** — `../docs/superpowers/plans/2026-06-05-native-glow-gpu.md`  ← execute this task-by-task
+>
+> Background: `../docs/handoffs/2026-06-05-native-glow-gpu-handoff.md`
+
+## Folder layout
+
+```
+glow-native/
+  core/    pure-C++ bloom engine (the math; no AE/CUDA deps) — single source of truth
+  cli/     glow_cli PNG-in/PNG-out harness + vendored stb (look iteration, AC tests)
+  tests/   glow_tests — property-based acceptance tests (AC1–AC4)
+  ae/      the compiled .aex: AE SDK shell + CUDA kernels + PiPL + VS2022 project
+  CMakeLists.txt   builds core + cli + tests (the .aex is built by ae/ vcxproj)
+  README.md        (this file)
+```
+
+The engine math lives **only** in `core/`. The AE CPU path links it; the CUDA kernels in
+`ae/` mirror it. Change a weight → change both → re-run the CPU↔GPU parity test (AC4).
+
+## Architecture (mip-pyramid bloom)
+
+```
+AE input (32f) ─▶ [linearize?] ─▶ threshold/extract ─▶ mip pyramid (downsample→upsample,
+                  per-level falloff weights) ─▶ tint/sat ─▶ tonemap ─▶ composite ─▶ output
+```
+Radius → mip levels + spread · Falloff → per-level weight ramp · Glow Dimensions → anamorphic ·
+Linear Light + Tonemap → the cinematic, never-clips-to-white look. Full rationale in the spec.
+
+## Toolchain (this PC — all installed)
+
+| Tool | Version |
+|---|---|
+| Visual Studio 2022 + "Desktop development with C++" | MSVC 14.44 |
+| CUDA Toolkit | 13.3 (`sm_89`, RTX 4080) |
+| After Effects SDK | **2025 (25.6)**, extracted, git-ignored |
+| After Effects (runtime test target) | **2024** (PiPL min-version = 2024 → also loads in 2026) |
+
+**SDK root:** `F:\APPS\AE_PLUGIN\AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK`
+**GPU sample to mirror:** `…\Examples\Effect\SDK_Invert_ProcAmp`
+
+## Build (core + cli + tests — works now)
+
+From a "x64 Native Tools Command Prompt for VS 2022", at the repo root:
+```
+cmake -S glow-native -B glow-native/build -G "Visual Studio 17 2022" -A x64
+cmake --build glow-native/build --config Debug
+glow-native/build/Debug/glow_tests.exe        # acceptance tests
+glow-native/build/Debug/glow_cli.exe in.png out.png --threshold 25 --radius 60 --intensity 150
+```
+(The `.aex` build via `ae/DeepGlowGPU.sln` comes online in plan Task 9 / milestone M0.)
 
 ## Status
 
-🟡 **Scaffold.** Architecture + parameter set + CUDA pipeline are in place. It compiles
-once the AE SDK and CUDA are on the include path. Sections needing SDK-version
-verification are marked `// VERIFY` in `DeepGlowGPU.cpp`.
-
-| Piece | State |
-|---|---|
-| Parameter set (mirrors `jsx/glow.jsx`) | ✅ done (`DeepGlowGPU.h`) |
-| CUDA glow pipeline (threshold → blur → tint → composite) | ✅ written (`DeepGlowGPU.cu`) |
-| AE command dispatch + ParamsSetup | ✅ written (`DeepGlowGPU.cpp`) |
-| GPU suite plumbing (device ptrs, stream, pre-render rects) | ⛔ `// VERIFY` — needs SDK present |
-| CPU fallback render | ⛔ stub — mirror the `.cu` math |
-| PiPL resource (`.r`) | ⛔ TODO |
-| VS2022 project / build wiring | ⛔ TODO (see below) |
-
-## Prerequisites (this PC)
-
-1. **Visual Studio 2022** + workload **"Desktop development with C++"** (MSVC v143).
-   *(being installed via winget: `Microsoft.VisualStudio.2022.Community`)*
-2. **CUDA Toolkit** — winget installs **13.3** (current). Supports VS2022 17.x and
-   target arch **`sm_89`** (RTX 4080, Ada).
-   *(being installed via winget: `Nvidia.CUDA`)*
-3. **After Effects SDK** — ✅ present: **AE 2025 SDK (25.6)**, extracted locally to
-   `AfterEffectsSDK_25.6_61_win/` (git-ignored). The 2025 SDK builds a `.aex` that
-   loads in AE 2024 here *and* AE 2026 on the other PC, provided the PiPL minimum-version
-   fields are set to 2024-era values and we avoid 2025-only suites.
-   - **SDK root:** `AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK`
-   - GPU reference sample to mirror for the `// VERIFY` plumbing:
-     `...\Examples\Effect\SDK_Invert_ProcAmp`
-
-## Build (once prereqs are in place)
-
-Set the SDK root so the headers in `DeepGlowGPU.cpp` resolve:
-```
-setx AESDK_ROOT  F:\APPS\AE_PLUGIN\AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK
-```
-
-Include paths needed by the compiler:
-- `%AESDK_ROOT%\Examples\Headers`
-- `%AESDK_ROOT%\Examples\Headers\SP`
-- `%AESDK_ROOT%\Examples\Util`
-- CUDA: `%CUDA_PATH%\include`   (CUDA_PATH is set by the toolkit installer)
-
-Compile the CUDA kernels (Ada / RTX 4080, CUDA 13.3):
-```
-nvcc -c DeepGlowGPU.cu -o DeepGlowGPU.obj -arch=sm_89 -O3 ^
-     -I "%AESDK_ROOT%\Examples\Headers"
-```
-
-Then build `DeepGlowGPU.cpp` with MSVC, link `DeepGlowGPU.obj` + `cudart.lib`, and
-emit a `.aex` (it's a renamed `.dll`). The PiPL resource (`DeepGlowGPU.r`, TODO) must
-be compiled with the SDK's `PiPLtool` and linked in — AE won't load the plugin without
-a valid PiPL.
-
-Install for testing (AE 2024):
-```
-copy DeepGlowGPU.aex "C:\Program Files\Adobe\Adobe After Effects 2024\Support Files\Plug-ins\"
-```
-It appears under **Effect ▸ AE Plugin Suite ▸ Deep Glow**.
-
-> A proper `.vcxproj`/`.sln` (mirroring the AE SDK `GPU` samples, e.g. ProcAmp) will be
-> added next. The AE SDK ships its samples as VS projects — easiest is to copy a GPU
-> sample's project and swap in these sources.
-
-## Architecture
-
-```
-                 ┌──────────── per glow pass (1..N) ────────────┐
-  AE input  ──▶  threshold/extract  ──▶  Gaussian blur H/V  ──▶  composite  ──▶  accum
-  (float4)        (soft knee)            (anamorphic-aware)       (Add/Screen,
-                                                                  pass-weighted)
-                                                                       │
-                            accum over source ◀─────────────────────────┘  ──▶  AE output
-```
-
-- **Pass weights** (`DG_PassScale`) and **radius growth** (`DG_PassRadiusFactor`) match
-  `_glowPassScale()` / `passRadiusFactor` in `jsx/glow.jsx`, so the native look matches
-  the ExtendScript look.
-- **Anamorphic** = blur only H or only V (`Glow Dimensions` popup).
-- **CPU and GPU must produce identical math** — the CPU fallback mirrors the `.cu`
-  kernels (Adobe requires a CPU path; the GPU path is what users actually hit).
-
-## Files
-
-| File | Role |
-|---|---|
-| `DeepGlowGPU.h`   | versions, param enum, `GlowParams` POD (shared w/ CUDA), pass weights |
-| `DeepGlowGPU.cu`  | CUDA kernels + `extern "C"` launchers |
-| `DeepGlowGPU.cpp` | AE entry point, ParamsSetup, render dispatch (CPU + GPU) |
-| `DeepGlowGPU.r`   | PiPL resource (TODO) |
+🟡 Scaffold in `ae/` + approved spec & plan. Implementation proceeds via the plan
+(M0 loads in AE → M1 CPU look correct → M2 CUDA parity + real-time → M3 cinematic params).
+OpenCL (AMD/Intel) and Mac/Metal are post-v1.
