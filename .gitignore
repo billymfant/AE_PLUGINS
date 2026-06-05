@@ -14,6 +14,7 @@ npm-debug.log*
 # Build artifacts
 dist/
 build/
+glow-native/build-cuda/
 *.log
 
 # Editor

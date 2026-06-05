@@ -20,3 +20,29 @@ add_executable(glow_tests tests/glow_tests.cpp)
 target_link_libraries(glow_tests PRIVATE glow_core)
 
 add_test(NAME glow_acceptance COMMAND glow_tests)
+
+# ------------------------------------------------------------------ #
+#  Optional CUDA target — AC4 CPU/GPU parity guardrail.
+#  Guarded so the CPU-only build still works on machines without CUDA.
+# ------------------------------------------------------------------ #
+include(CheckLanguage)
+check_language(CUDA)
+if(CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_ARCHITECTURES 89)   # RTX 4080 / Ada (sm_89)
+
+    add_executable(glow_parity
+        cuda/glow_parity.cpp
+        cuda/glow_cuda.cu)
+    target_link_libraries(glow_parity PRIVATE glow_core)
+    target_include_directories(glow_parity PRIVATE core cuda)
+    set_target_properties(glow_parity PROPERTIES
+        CUDA_ARCHITECTURES 89
+        CXX_STANDARD 17
+        CXX_EXTENSIONS OFF)
+
+    add_test(NAME glow_parity COMMAND glow_parity)
+    message(STATUS "CUDA found (${CMAKE_CUDA_COMPILER}) — building glow_parity (AC4)")
+else()
+    message(STATUS "CUDA not found — skipping glow_parity (CPU-only build)")
+endif()
