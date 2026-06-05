@@ -25,4 +25,24 @@ void sampleBilinear(const Image& s, float u, float v, float out[4]) {
     }
 }
 
+static inline float smoothstep(float e0, float e1, float x){
+    float t = (x - e0) / (e1 - e0 + 1e-6f);
+    t = t<0?0:(t>1?1:t);
+    return t*t*(3.0f - 2.0f*t);
+}
+
+Image extractBright(const Image& src, const Params& p) {
+    Image out(src.w, src.h);
+    float lo = p.threshold - p.thresholdSoft;   // knee start
+    float hi = p.threshold;                      // full pass at/above
+    for (int y=0;y<src.h;++y) for (int x=0;x<src.w;++x){
+        const float* s = src.at(x,y);
+        float l = luma(s[0],s[1],s[2]);
+        float m = (lo >= hi) ? (l >= hi ? 1.f : 0.f) : smoothstep(lo, hi, l);
+        float* o = out.at(x,y);
+        o[0]=s[0]*m*p.sourceGain; o[1]=s[1]*m*p.sourceGain; o[2]=s[2]*m*p.sourceGain; o[3]=m;
+    }
+    return out;
+}
+
 } // namespace glow
