@@ -35,5 +35,8 @@ build/
 *.dmg
 *.pkg
 
+# Adobe AE SDK (vendored locally, not part of the repo)
+AfterEffectsSDK_*/
+
 # Visual companion brainstorm sessions
 .superpowers/
