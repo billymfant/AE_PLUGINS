@@ -1,6 +1,7 @@
 #include "glow_core.h"
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace glow {
 
@@ -88,6 +89,70 @@ void upsampleAdd(const Image& low, Image& hi, float weight, int dimensions) {
         float* hh=hi.at(x,y);
         hh[0]+=acc[0]*weight; hh[1]+=acc[1]*weight; hh[2]+=acc[2]*weight; hh[3]+=acc[3]*weight;
     }
+}
+
+static inline float srgb_to_lin(float c){ return c<=0.04045f? c/12.92f : std::pow((c+0.055f)/1.055f,2.4f); }
+static inline float lin_to_srgb(float c){ return c<=0.0031308f? c*12.92f : 1.055f*std::pow(c,1.0f/2.4f)-0.055f; }
+static inline float clampf(float v,float lo,float hi){ return v<lo?lo:(v>hi?hi:v); }
+
+static void applyTint(float& r,float& g,float& b,const Params& p){
+    if (p.colorize){ float l=luma(r,g,b); r=l*p.glowR; g=l*p.glowG; b=l*p.glowB; }
+    else           { r*=p.glowR; g*=p.glowG; b*=p.glowB; }
+    if (p.saturation!=0.f){ float l=luma(r,g,b);
+        r=l+(r-l)*(1.f+p.saturation); g=l+(g-l)*(1.f+p.saturation); b=l+(b-l)*(1.f+p.saturation); }
+}
+static inline float tonemap1(float x,const Params& p){
+    if (p.tonemap==TONE_NONE) return x;
+    if (p.tonemap==TONE_SOFTCLIP){ float k=0.2f+1.8f*(1.f-p.highlightComp); return x/(x+k)*(1.f+k); }
+    // Filmic (Reinhard-extended)
+    float w=4.0f; return (x*(1.f+x/(w*w)))/(1.f+x);
+}
+
+Image bloom(const Image& src, const Params& p) {
+    // 0. optional linearize
+    Image lin = src;
+    if (p.linearLight) for (size_t i=0;i<lin.px.size();i+=4){
+        lin.px[i]=srgb_to_lin(lin.px[i]); lin.px[i+1]=srgb_to_lin(lin.px[i+1]); lin.px[i+2]=srgb_to_lin(lin.px[i+2]); }
+
+    // 1. extract bright source
+    Image bright = extractBright(lin, p);
+
+    // 2. build mip chain
+    int minDim = src.w<src.h?src.w:src.h;
+    int levels = p.levels>0 ? p.levels : autoLevels(p.radius, minDim);
+    std::vector<Image> mips; mips.reserve(levels);
+    mips.push_back(downsampleHalf(bright));
+    for (int l=1;l<levels;++l){
+        if (mips.back().w<2 || mips.back().h<2) break;
+        mips.push_back(downsampleHalf(mips.back()));
+    }
+
+    // 3. accumulate upsample at full res, weighted by falloff per level
+    Image glow(src.w, src.h);
+    int n = (int)mips.size();
+    for (int l=0;l<n;++l) upsampleAdd(mips[l], glow, levelWeight(l,n,p.falloff), p.dimensions);
+
+    // 4. per-pixel tint, intensity, tonemap, composite
+    Image out(src.w, src.h);
+    for (int y=0;y<src.h;++y) for (int x=0;x<src.w;++x){
+        const float* s = lin.at(x,y);
+        float gr=glow.at(x,y)[0], gg=glow.at(x,y)[1], gb=glow.at(x,y)[2];
+        applyTint(gr,gg,gb,p);
+        gr*=p.intensity; gg*=p.intensity; gb*=p.intensity;
+        gr=tonemap1(gr,p); gg=tonemap1(gg,p); gb=tonemap1(gb,p);
+        float r,g,b;
+        if (p.glowOnly){ r=gr; g=gg; b=gb; }
+        else if (p.blendOp==BLEND_SCREEN){
+            r=1.f-(1.f-s[0])*(1.f-clampf(gr,0,1)); g=1.f-(1.f-s[1])*(1.f-clampf(gg,0,1)); b=1.f-(1.f-s[2])*(1.f-clampf(gb,0,1));
+        } else { r=s[0]+gr; g=s[1]+gg; b=s[2]+gb; }
+        float* o=out.at(x,y);
+        o[0]=r; o[1]=g; o[2]=b; o[3]=p.glowOnly? clampf(glow.at(x,y)[3],0,1) : s[3];
+    }
+
+    // 5. optional de-linearize
+    if (p.linearLight) for (size_t i=0;i<out.px.size();i+=4){
+        out.px[i]=lin_to_srgb(out.px[i]); out.px[i+1]=lin_to_srgb(out.px[i+1]); out.px[i+2]=lin_to_srgb(out.px[i+2]); }
+    return out;
 }
 
 } // namespace glow

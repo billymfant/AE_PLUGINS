@@ -77,12 +77,39 @@ static void test_AC1_threshold_direction() {
     CHECK(elo > emid && emid > ehi);      // higher threshold => less extracted (NOT inverted)
 }
 
+static void test_AC2_soft_round_falloff() {
+    Image src = whiteSquare(128,128,32);
+    Params p; p.threshold=0.10f; p.thresholdSoft=0.05f; p.radius=40.f; p.levels=0;
+    p.blendOp=BLEND_ADD; p.glowOnly=true; p.intensity=1.0f; p.linearLight=false; p.tonemap=TONE_NONE;
+    Image g = bloom(src, p);
+    // sample outward from the right edge of the square along the center row
+    int y=64, xEdge=(128+32)/2;             // first pixel outside the square
+    float prev = 1e9f; bool anyGlow=false;
+    for (int d=0; d<24; ++d){
+        float val = g.at(xEdge+d, y)[0];
+        if (val>0.0005f) anyGlow=true;
+        CHECK(val <= prev + 1e-4f);          // monotonic non-increasing => no hard secondary box
+        prev = val;
+    }
+    CHECK(anyGlow);                          // there IS a halo (not "no glow")
+}
+
+static void test_AC3_source_preserved() {
+    Image src = whiteSquare(64,64,16);
+    Params p; p.threshold=0.10f; p.blendOp=BLEND_ADD; p.glowOnly=false; p.linearLight=false; p.tonemap=TONE_NONE;
+    Image g = bloom(src, p);
+    // interior pixel stays at least as bright as the source (glow adds, never punches a hole)
+    CHECK(g.at(32,32)[0] >= 1.0f - 1e-3f);
+}
+
 int main() {
     test_luma();
     test_bilinear_center();
     test_AC1_threshold_direction();
     test_downsample_dims_and_energy();
     test_upsample_adds_and_spreads();
+    test_AC2_soft_round_falloff();
+    test_AC3_source_preserved();
     if (g_fail) { printf("%d CHECK(s) failed\n", g_fail); return 1; }
     printf("ALL TESTS PASSED\n"); return 0;
 }
