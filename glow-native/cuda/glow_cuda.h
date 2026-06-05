@@ -30,6 +30,25 @@ extern "C" {
  */
 int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut, int w, int h, const glow::Params& p);
 
+/*
+ *  GPU render-path entry for the AE plugin (PF_Cmd_SMART_RENDER_GPU).
+ *
+ *  Operates on DEVICE pointers handed to us by AE's GPU world suite. AE GPU
+ *  worlds are float4 in B,G,R,A channel order with a row pitch (in float4
+ *  elements, i.e. rowbytes/16). This routine:
+ *    - packs the BGRA pitched input into a contiguous RGBA scratch buffer,
+ *    - runs the SAME pyramid bloom as glow_bloom_cuda (identical kernels/math),
+ *    - writes the RGBA result back out as BGRA into the pitched output buffer.
+ *
+ *  src/dst are device pointers (already in the active CUDA context). srcPitch/
+ *  dstPitch are in float4 elements. Returns 0 on success, nonzero on CUDA error.
+ *  Does NOT call cudaDeviceSynchronize for the caller; it synchronizes
+ *  internally so results are valid on return (mirrors the SDK sample).
+ */
+int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
+                        int srcPitch, int dstPitch,
+                        int w, int h, const glow::Params& p);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

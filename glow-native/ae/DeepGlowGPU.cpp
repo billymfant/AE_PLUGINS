@@ -30,12 +30,21 @@
 
 #include "DeepGlowGPU.h"
 
+#if HAS_CUDA
+    #include <cuda_runtime.h>
+    // cuda_runtime.h defines MAJOR_VERSION/MINOR_VERSION macros that collide
+    // with the SDK; undef them (mirrors the SDK ProcAmp sample).
+    #undef MAJOR_VERSION
+    #undef MINOR_VERSION
+#endif
+
 #include "AEConfig.h"
 #include "entry.h"
 #include "AEFX_SuiteHelper.h"
 #include "AE_Effect.h"
 #include "AE_EffectCB.h"
 #include "AE_EffectCBSuites.h"
+#include "AE_EffectGPUSuites.h"  // PF_GPUDeviceSuite1 / PF_GPUDeviceInfo
 #include "AE_EffectPixelFormat.h"
 #include "AE_Macros.h"
 #include "AE_PluginData.h"
@@ -44,6 +53,7 @@
 #include "String_Utils.h"
 
 #include "glow_core.h"          // the pure-C++ engine: glow::Image / Params / bloom
+#include "glow_cuda.h"          // glow_bloom_cuda_gpu (CUDA pyramid on device pointers)
 
 #include <string.h>
 #include <math.h>
@@ -67,10 +77,12 @@ About(PF_InData* in_data, PF_OutData* out_data,
 /* ================================================================== *
  *  GLOBAL_SETUP — advertise capabilities
  *  NOTE: out_flags / out_flags2 MUST match the PiPL hex values:
- *      out_flags  = PIX_INDEPENDENT | DEEP_COLOR_AWARE        = 0x2000400
- *      out_flags2 = SMART_RENDER | FLOAT_COLOR_AWARE
- *                   | SUPPORTS_THREADED_RENDERING             = 0x8001400
- *  GPU flags are deliberately omitted at M0/M1.
+ *      out_flags  = PIX_INDEPENDENT | DEEP_COLOR_AWARE        = 0x02000400
+ *      out_flags2 = SMART_RENDER(1<<10) | FLOAT_COLOR_AWARE(1<<12)
+ *                   | SUPPORTS_GPU_RENDER_F32(1<<25)
+ *                   | SUPPORTS_THREADED_RENDERING(1<<27)      = 0x0A001400
+ *  AE refuses the GPU path unless the PiPL OutFlags2 hex matches the code, so
+ *  keep DeepGlowGPUPiPL.r in sync (it is set to 0x0A001400).
  * ================================================================== */
 static PF_Err
 GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
@@ -85,8 +97,44 @@ GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
 
     out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
                            PF_OutFlag2_FLOAT_COLOR_AWARE |
-                           PF_OutFlag2_SUPPORTS_THREADED_RENDERING;
+                           PF_OutFlag2_SUPPORTS_THREADED_RENDERING |
+                           PF_OutFlag2_SUPPORTS_GPU_RENDER_F32;
 
+    return PF_Err_NONE;
+}
+
+
+/* ================================================================== *
+ *  GPU_DEVICE_SETUP / SETDOWN
+ *
+ *  We only support CUDA. The kernels are statically linked, so there is
+ *  nothing to compile/cache here (mirrors the SDK ProcAmp CUDA branch):
+ *  we acquire the GPU suites, confirm the framework is CUDA, and re-assert
+ *  the GPU-render flag. Per-render scratch buffers are allocated inside the
+ *  CUDA entry, so no persistent allocation is needed at setup.
+ * ================================================================== */
+static PF_Err
+GPUDeviceSetup(PF_InData* in_data, PF_OutData* out_data,
+               PF_GPUDeviceSetupExtra* extraP)
+{
+    PF_Err err = PF_Err_NONE;
+
+    if (extraP->input->what_gpu == PF_GPU_Framework_CUDA) {
+        // CUDA kernels are statically linked; nothing to build.
+        out_data->out_flags2 = PF_OutFlag2_SUPPORTS_GPU_RENDER_F32;
+    } else {
+        // Other frameworks (OpenCL / Metal / DirectX) are not implemented;
+        // AE will fall back to the CPU SmartRender path.
+        err = PF_Err_NONE;
+    }
+    return err;
+}
+
+static PF_Err
+GPUDeviceSetdown(PF_InData* in_data, PF_OutData* out_data,
+                 PF_GPUDeviceSetdownExtra* extraP)
+{
+    // No persistent GPU resources were allocated in setup, so nothing to free.
     return PF_Err_NONE;
 }
 
@@ -386,6 +434,10 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
     PF_CheckoutResult in_result;
     PF_RenderRequest  req = extraP->input->output_request;
 
+    // Tell AE this frame can be rendered on the GPU (SMART_RENDER_GPU). AE will
+    // still call the CPU SmartRender when GPU is unavailable/disabled.
+    extraP->output->flags |= PF_RenderOutputFlag_GPU_RENDER_POSSIBLE;
+
     ERR(extraP->cb->checkout_layer(in_data->effect_ref,
                                    DG_INPUT,
                                    DG_INPUT,
@@ -404,12 +456,108 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
 
 
 /* ================================================================== *
- *  SMART_RENDER — build glow::Image from input, run core::bloom,
- *  write the result into the output world. Wrapped so any std/throw
- *  path returns a clean PF_Err (the dispatcher try/catch is the net).
+ *  SMART_RENDER (CPU) — build glow::Image from input, run core::bloom,
+ *  write the result into the output world. This is the REQUIRED fallback;
+ *  it always works even when the GPU path is unavailable/disabled.
  * ================================================================== */
 static PF_Err
-SmartRender(PF_InData* in_data, PF_OutData* out_data, PF_SmartRenderExtra* extraP)
+SmartRenderCPU(PF_InData* in_data, PF_OutData* out_data,
+               PF_EffectWorld* input_worldP, PF_EffectWorld* output_worldP,
+               const glow::Params& gp)
+{
+    PF_Err err = PF_Err_NONE;
+
+    PF_PixelFormat in_fmt  = PF_PixelFormat_INVALID;
+    PF_PixelFormat out_fmt = PF_PixelFormat_INVALID;
+    ERR(GetWorldPixelFormat(in_data, out_data, input_worldP, &in_fmt));
+    ERR(GetWorldPixelFormat(in_data, out_data, output_worldP, &out_fmt));
+
+    if (!err) {
+        // Build the source image from the (possibly expanded) input world.
+        glow::Image src = WorldToImage(input_worldP, in_fmt);
+
+        // Run the engine. All glow math lives in core/.
+        glow::Image dst = glow::bloom(src, gp);
+
+        // Map: origin of input buffer within the output buffer.
+        // Non-zero only when the buffer was expanded in PreRender.
+        int originX = (int)in_data->output_origin_x;
+        int originY = (int)in_data->output_origin_y;
+
+        ImageToWorld(dst, output_worldP, out_fmt, originX, originY);
+    }
+    return err;
+}
+
+
+#if HAS_CUDA
+/* ================================================================== *
+ *  SMART_RENDER (GPU) — run the CUDA pyramid bloom directly on the GPU
+ *  worlds AE handed us (no host copies). Mirrors the SDK ProcAmp CUDA
+ *  path: GPU worlds are float4 BGRA (PF_PixelFormat_GPU_BGRA128) with a
+ *  row pitch; we hand the device pointers + pitch (in float4 elements) to
+ *  glow_bloom_cuda_gpu, which reuses the EXACT Stage-1 kernels.
+ *
+ *  Note: input and output GPU worlds are the same size here (PreRender did
+ *  not expand the buffer), so no origin remap is needed.
+ * ================================================================== */
+static PF_Err
+SmartRenderGPU(PF_InData* in_data, PF_OutData* out_data,
+               PF_EffectWorld* input_worldP, PF_EffectWorld* output_worldP,
+               PF_SmartRenderExtra* extraP, const glow::Params& gp)
+{
+    PF_Err err = PF_Err_NONE;
+
+    PF_GPUDeviceSuite1* gpu_suite = NULL;
+    ERR(AEFX_AcquireSuite(in_data, out_data,
+                          kPFGPUDeviceSuite, kPFGPUDeviceSuiteVersion1,
+                          "Couldn't load GPU Device Suite.",
+                          (void**)&gpu_suite));
+
+    // Confirm the GPU world pixel format is the float BGRA we expect.
+    PF_PixelFormat pixel_format = PF_PixelFormat_INVALID;
+    ERR(GetWorldPixelFormat(in_data, out_data, input_worldP, &pixel_format));
+    if (!err && pixel_format != PF_PixelFormat_GPU_BGRA128) {
+        err = PF_Err_UNRECOGNIZED_PARAM_TYPE;
+    }
+
+    void* src_mem = NULL;
+    void* dst_mem = NULL;
+    if (!err) ERR(gpu_suite->GetGPUWorldData(in_data->effect_ref, input_worldP,  &src_mem));
+    if (!err) ERR(gpu_suite->GetGPUWorldData(in_data->effect_ref, output_worldP, &dst_mem));
+
+    if (!err && src_mem && dst_mem) {
+        const A_long bytes_per_pixel = 16;   // float4
+        int srcPitch = input_worldP->rowbytes  / bytes_per_pixel;  // in float4 elements
+        int dstPitch = output_worldP->rowbytes / bytes_per_pixel;
+
+        int rc = glow_bloom_cuda_gpu((const float*)src_mem, (float*)dst_mem,
+                                     srcPitch, dstPitch,
+                                     input_worldP->width, input_worldP->height, gp);
+        if (rc != 0 || cudaPeekAtLastError() != cudaSuccess) {
+            err = PF_Err_INTERNAL_STRUCT_DAMAGED;
+        }
+    } else if (!err) {
+        err = PF_Err_BAD_CALLBACK_PARAM;
+    }
+
+    if (gpu_suite) {
+        AEFX_ReleaseSuite(in_data, out_data,
+                          kPFGPUDeviceSuite, kPFGPUDeviceSuiteVersion1, NULL);
+    }
+    return err;
+}
+#endif // HAS_CUDA
+
+
+/* ================================================================== *
+ *  SMART_RENDER dispatcher — shared param + world checkout, then branch
+ *  to the GPU or CPU implementation. Wrapped so any std/throw path returns
+ *  a clean PF_Err (the EffectMain try/catch is the net).
+ * ================================================================== */
+static PF_Err
+SmartRender(PF_InData* in_data, PF_OutData* out_data,
+            PF_SmartRenderExtra* extraP, bool isGPU)
 {
     PF_Err err  = PF_Err_NONE;
     PF_Err err2 = PF_Err_NONE;
@@ -440,26 +588,16 @@ SmartRender(PF_InData* in_data, PF_OutData* out_data, PF_SmartRenderExtra* extra
         input_worldP->width > 0 && input_worldP->height > 0 &&
         output_worldP->width > 0 && output_worldP->height > 0) {
 
-        PF_PixelFormat in_fmt  = PF_PixelFormat_INVALID;
-        PF_PixelFormat out_fmt = PF_PixelFormat_INVALID;
-        ERR(GetWorldPixelFormat(in_data, out_data, input_worldP, &in_fmt));
-        ERR(GetWorldPixelFormat(in_data, out_data, output_worldP, &out_fmt));
+        glow::Params gp = ReadParams(params);
 
-        if (!err) {
-            glow::Params gp = ReadParams(params);
-
-            // Build the source image from the (possibly expanded) input world.
-            glow::Image src = WorldToImage(input_worldP, in_fmt);
-
-            // Run the engine. All glow math lives in core/.
-            glow::Image dst = glow::bloom(src, gp);
-
-            // Map: origin of input buffer within the output buffer.
-            // Non-zero only when the buffer was expanded in PreRender.
-            int originX = (int)in_data->output_origin_x;
-            int originY = (int)in_data->output_origin_y;
-
-            ImageToWorld(dst, output_worldP, out_fmt, originX, originY);
+        if (isGPU) {
+#if HAS_CUDA
+            err = SmartRenderGPU(in_data, out_data, input_worldP, output_worldP, extraP, gp);
+#else
+            err = PF_Err_UNRECOGNIZED_PARAM_TYPE;   // built without CUDA
+#endif
+        } else {
+            err = SmartRenderCPU(in_data, out_data, input_worldP, output_worldP, gp);
         }
     } else if (!err) {
         err = PF_Err_BAD_CALLBACK_PARAM;
@@ -521,11 +659,24 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data,
             case PF_Cmd_PARAMS_SETUP:
                 err = ParamsSetup(in_data, out_data, params, output);
                 break;
+            case PF_Cmd_GPU_DEVICE_SETUP:
+                err = GPUDeviceSetup(in_data, out_data,
+                                     reinterpret_cast<PF_GPUDeviceSetupExtra*>(extra));
+                break;
+            case PF_Cmd_GPU_DEVICE_SETDOWN:
+                err = GPUDeviceSetdown(in_data, out_data,
+                                       reinterpret_cast<PF_GPUDeviceSetdownExtra*>(extra));
+                break;
             case PF_Cmd_SMART_PRE_RENDER:
                 err = PreRender(in_data, out_data, reinterpret_cast<PF_PreRenderExtra*>(extra));
                 break;
             case PF_Cmd_SMART_RENDER:
-                err = SmartRender(in_data, out_data, reinterpret_cast<PF_SmartRenderExtra*>(extra));
+                err = SmartRender(in_data, out_data,
+                                  reinterpret_cast<PF_SmartRenderExtra*>(extra), false);
+                break;
+            case PF_Cmd_SMART_RENDER_GPU:
+                err = SmartRender(in_data, out_data,
+                                  reinterpret_cast<PF_SmartRenderExtra*>(extra), true);
                 break;
             default:
                 break;

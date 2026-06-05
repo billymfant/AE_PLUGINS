@@ -51,8 +51,12 @@ resource 'PiPL' (16000) {
 		AE_Effect_Global_OutFlags {
 			0x2000400
 		},
+		/* 0x0A001400 = SMART_RENDER(1<<10=0x400) | FLOAT_COLOR_AWARE(1<<12=0x1000)
+		   | SUPPORTS_GPU_RENDER_F32(1<<25=0x2000000)
+		   | SUPPORTS_THREADED_RENDERING(1<<27=0x8000000)
+		   MUST match GlobalSetup()'s out_flags2 or AE refuses the GPU path. */
 		AE_Effect_Global_OutFlags_2 {
-			0x8001400
+			0x0A001400
 		},
 		/* [11] */
 		AE_Effect_Match_Name {

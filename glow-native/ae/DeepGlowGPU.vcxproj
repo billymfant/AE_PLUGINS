@@ -19,6 +19,9 @@
   <!-- Path to the vendored AE SDK's Examples folder (relative to this .vcxproj). -->
   <PropertyGroup Label="UserMacros">
     <AE_SDK>$(ProjectDir)..\..\AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK\Examples</AE_SDK>
+    <!-- CUDA 13.3 toolkit; CUDA_PATH is normally set by the toolkit installer. -->
+    <CUDA_TOOLKIT Condition="'$(CUDA_PATH)'!=''">$(CUDA_PATH)</CUDA_TOOLKIT>
+    <CUDA_TOOLKIT Condition="'$(CUDA_TOOLKIT)'==''">C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3</CUDA_TOOLKIT>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -50,8 +53,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\core;$(AE_SDK)\Headers;$(AE_SDK)\Headers\SP;$(AE_SDK)\Headers\Win;$(AE_SDK)\Resources;$(AE_SDK)\Util;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>MSWindows;WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\core;$(ProjectDir)..\cuda;$(CUDA_TOOLKIT)\include;$(AE_SDK)\Headers;$(AE_SDK)\Headers\SP;$(AE_SDK)\Headers\Win;$(AE_SDK)\Resources;$(AE_SDK)\Util;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>MSWindows;WIN32;_DEBUG;_WINDOWS;HAS_CUDA=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -73,13 +76,15 @@
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
       <TargetMachine>MachineX64</TargetMachine>
+      <AdditionalLibraryDirectories>$(CUDA_TOOLKIT)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cudart_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\core;$(AE_SDK)\Headers;$(AE_SDK)\Headers\SP;$(AE_SDK)\Headers\Win;$(AE_SDK)\Resources;$(AE_SDK)\Util;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>MSWindows;WIN32;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\core;$(ProjectDir)..\cuda;$(CUDA_TOOLKIT)\include;$(AE_SDK)\Headers;$(AE_SDK)\Headers\SP;$(AE_SDK)\Headers\Win;$(AE_SDK)\Resources;$(AE_SDK)\Util;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>MSWindows;WIN32;_WINDOWS;HAS_CUDA=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
@@ -101,6 +106,8 @@
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <ImportLibrary>$(IntDir)$(TargetName).lib</ImportLibrary>
       <TargetMachine>MachineX64</TargetMachine>
+      <AdditionalLibraryDirectories>$(CUDA_TOOLKIT)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>cudart_static.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -111,6 +118,24 @@
     <ClCompile Include="..\core\glow_core.cpp" />
     <ClCompile Include="$(AE_SDK)\Util\Smart_Utils.cpp" />
     <ClCompile Include="$(AE_SDK)\Util\AEFX_SuiteHelper.c" />
+  </ItemGroup>
+  <!-- CUDA pyramid kernels (shared with the Stage-1 parity build). nvcc compiles
+       the .cu to an .obj which MSBuild links into the .aex automatically (the
+       .obj appears in the CustomBuild Outputs). compute_89/sm_89 = RTX 40-series. -->
+  <ItemGroup>
+    <CustomBuild Include="..\cuda\glow_cuda.cu">
+      <FileType>Document</FileType>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rem Compile the CUDA pyramid kernels (requires nvcc from the CUDA 13.3 toolkit)
+"$(CUDA_TOOLKIT)\bin\nvcc.exe" -D_DEBUG -DHAS_CUDA=1 -gencode arch=compute_89,code=sm_89 -use_fast_math -m64 -c -ccbin "$(VC_ExecutablePath_x64_x64)" -Xcompiler /MDd,/EHsc,/W3,/nologo,/Zi -I"$(CUDA_TOOLKIT)\include" -I"$(ProjectDir)..\core" -I"$(ProjectDir)..\cuda" -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">rem Compile the CUDA pyramid kernels (requires nvcc from the CUDA 13.3 toolkit)
+"$(CUDA_TOOLKIT)\bin\nvcc.exe" -DHAS_CUDA=1 -gencode arch=compute_89,code=sm_89 -use_fast_math -m64 -c -ccbin "$(VC_ExecutablePath_x64_x64)" -Xcompiler /MD,/EHsc,/W3,/nologo -I"$(CUDA_TOOLKIT)\include" -I"$(ProjectDir)..\core" -I"$(ProjectDir)..\cuda" -o "$(IntDir)%(Filename).obj" "%(FullPath)"</Command>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling CUDA kernels: %(Filename).cu</Message>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling CUDA kernels: %(Filename).cu</Message>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(IntDir)%(Filename).obj</Outputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(IntDir)%(Filename).obj</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(ProjectDir)..\cuda\glow_cuda.h;$(ProjectDir)..\core\glow_core.h;$(ProjectDir)..\core\glow_params.h;%(AdditionalInputs)</AdditionalInputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectDir)..\cuda\glow_cuda.h;$(ProjectDir)..\core\glow_core.h;$(ProjectDir)..\core\glow_params.h;%(AdditionalInputs)</AdditionalInputs>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="DeepGlowGPUPiPL.r">

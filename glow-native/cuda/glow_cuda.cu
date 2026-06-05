@@ -312,3 +312,128 @@ fail:
     if (dOut)    cudaFree(dOut);
     return err==cudaSuccess ? 0 : 2;
 }
+
+/* ================================================================== *
+ *  AE GPU render path (PF_Cmd_SMART_RENDER_GPU).
+ *
+ *  AE GPU worlds are float4 B,G,R,A with a row pitch (in float4 elements).
+ *  We pack BGRA-pitched -> contiguous RGBA (so the existing kernels, which
+ *  assume tightly-packed RGBA, are reused verbatim), run the identical
+ *  pyramid, then write RGBA -> BGRA-pitched out. This keeps the math in ONE
+ *  place: the same kernels prove parity in glow_parity.
+ * ================================================================== */
+
+/* pitched BGRA (float4) -> contiguous RGBA (float, w*h*4). */
+__global__ void k_bgra_to_rgba(const float* src, int srcPitch4,
+                               float* dst, int w, int h){
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+    if (x>=w || y>=h) return;
+    size_t si = ((size_t)y*srcPitch4 + x)*4;   // float4 element stride -> *4 floats
+    size_t di = ((size_t)y*w + x)*4;
+    // AE GPU world channel order is B,G,R,A: slot0=B, slot1=G, slot2=R, slot3=A.
+    dst[di  ] = src[si+2]; // R
+    dst[di+1] = src[si+1]; // G
+    dst[di+2] = src[si+0]; // B
+    dst[di+3] = src[si+3]; // A
+}
+
+/* contiguous RGBA -> pitched BGRA (float4). */
+__global__ void k_rgba_to_bgra(const float* src, int w, int h,
+                               float* dst, int dstPitch4){
+    int x = blockIdx.x*blockDim.x + threadIdx.x;
+    int y = blockIdx.y*blockDim.y + threadIdx.y;
+    if (x>=w || y>=h) return;
+    size_t si = ((size_t)y*w + x)*4;
+    size_t di = ((size_t)y*dstPitch4 + x)*4;
+    dst[di+0] = src[si+2]; // B <- R
+    dst[di+1] = src[si+1]; // G
+    dst[di+2] = src[si+0]; // R <- B
+    dst[di+3] = src[si+3]; // A
+}
+
+extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
+                                   int srcPitch, int dstPitch,
+                                   int w, int h, const Params& p){
+    if (w<=0 || h<=0 || !srcBGRA || !dstBGRA) return 1;
+
+    const dim3 block(16,16);
+    cudaError_t err = cudaSuccess;
+
+    const int MAX_MIPS = 16;
+    DevBuf mips[MAX_MIPS];
+    int nmips = 0;
+
+    float* dLin   = nullptr;
+    float* dBright= nullptr;
+    float* dGlow  = nullptr;
+    float* dOut   = nullptr;
+
+    size_t full = (size_t)w*h*4*sizeof(float);
+
+    CU_TRY(cudaMalloc(&dLin,   full));
+    CU_TRY(cudaMalloc(&dBright,full));
+    CU_TRY(cudaMalloc(&dGlow,  full));
+    CU_TRY(cudaMalloc(&dOut,   full));
+    CU_TRY(cudaMemset(dGlow, 0, full));
+
+    {
+        dim3 g = grid2d(w,h,block);
+
+        // unpack AE BGRA(pitched) -> contiguous RGBA into dLin
+        k_bgra_to_rgba<<<g,block>>>(srcBGRA, srcPitch, dLin, w, h);
+        CU_TRY(cudaGetLastError());
+
+        if (p.linearLight){ k_srgb_to_lin<<<g,block>>>(dLin, w, h); CU_TRY(cudaGetLastError()); }
+
+        k_extractBright<<<g,block>>>(dLin, dBright, w, h, p);
+        CU_TRY(cudaGetLastError());
+
+        int minDim = w<h?w:h;
+        int levels = p.levels>0 ? p.levels : glow::autoLevels(p.radius, minDim);
+        {
+            int dw=(w+1)/2, dh=(h+1)/2;
+            CU_TRY(cudaMalloc(&mips[0].p, (size_t)dw*dh*4*sizeof(float)));
+            mips[0].w=dw; mips[0].h=dh; nmips=1;
+            k_downsampleHalf<<<grid2d(dw,dh,block),block>>>(dBright, w, h, mips[0].p, dw, dh);
+            CU_TRY(cudaGetLastError());
+        }
+        for (int l=1;l<levels && nmips<MAX_MIPS;++l){
+            DevBuf& prev = mips[nmips-1];
+            if (prev.w<2 || prev.h<2) break;
+            int dw=(prev.w+1)/2, dh=(prev.h+1)/2;
+            CU_TRY(cudaMalloc(&mips[nmips].p, (size_t)dw*dh*4*sizeof(float)));
+            mips[nmips].w=dw; mips[nmips].h=dh;
+            k_downsampleHalf<<<grid2d(dw,dh,block),block>>>(prev.p, prev.w, prev.h,
+                                                            mips[nmips].p, dw, dh);
+            CU_TRY(cudaGetLastError());
+            ++nmips;
+        }
+        for (int l=0;l<nmips;++l){
+            float wgt = glow::levelWeight(l, nmips, p.falloff);
+            k_upsampleAdd<<<g,block>>>(mips[l].p, mips[l].w, mips[l].h,
+                                       dGlow, w, h, wgt, p.dimensions);
+            CU_TRY(cudaGetLastError());
+        }
+
+        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, p);
+        CU_TRY(cudaGetLastError());
+
+        if (p.linearLight){ k_lin_to_srgb<<<g,block>>>(dOut, w, h); CU_TRY(cudaGetLastError()); }
+
+        // pack contiguous RGBA -> AE BGRA(pitched)
+        k_rgba_to_bgra<<<g,block>>>(dOut, w, h, dstBGRA, dstPitch);
+        CU_TRY(cudaGetLastError());
+
+        CU_TRY(cudaDeviceSynchronize());
+    }
+
+    err = cudaSuccess;
+fail:
+    for (int i=0;i<nmips;++i) if (mips[i].p) cudaFree(mips[i].p);
+    if (dLin)    cudaFree(dLin);
+    if (dBright) cudaFree(dBright);
+    if (dGlow)   cudaFree(dGlow);
+    if (dOut)    cudaFree(dOut);
+    return err==cudaSuccess ? 0 : 2;
+}
