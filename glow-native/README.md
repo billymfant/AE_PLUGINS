@@ -28,16 +28,19 @@ verification are marked `// VERIFY` in `DeepGlowGPU.cpp`.
 2. **CUDA Toolkit** — winget installs **13.3** (current). Supports VS2022 17.x and
    target arch **`sm_89`** (RTX 4080, Ada).
    *(being installed via winget: `Nvidia.CUDA`)*
-3. **After Effects SDK** — download from Adobe's developer portal (**requires Adobe
-   login — manual step**). Use the **AE 2024** SDK (this PC's build target; a plugin
-   built against 2024 also loads in AE 2026). Unzip somewhere stable, e.g.
-   `F:\SDKs\AfterEffectsSDK`.
+3. **After Effects SDK** — ✅ present: **AE 2025 SDK (25.6)**, extracted locally to
+   `AfterEffectsSDK_25.6_61_win/` (git-ignored). The 2025 SDK builds a `.aex` that
+   loads in AE 2024 here *and* AE 2026 on the other PC, provided the PiPL minimum-version
+   fields are set to 2024-era values and we avoid 2025-only suites.
+   - **SDK root:** `AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK`
+   - GPU reference sample to mirror for the `// VERIFY` plumbing:
+     `...\Examples\Effect\SDK_Invert_ProcAmp`
 
 ## Build (once prereqs are in place)
 
 Set the SDK root so the headers in `DeepGlowGPU.cpp` resolve:
 ```
-setx AESDK_ROOT  F:\SDKs\AfterEffectsSDK
+setx AESDK_ROOT  F:\APPS\AE_PLUGIN\AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK
 ```
 
 Include paths needed by the compiler:
