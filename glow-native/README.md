@@ -54,10 +54,28 @@ cmake --build glow-native/build --config Debug
 glow-native/build/Debug/glow_tests.exe        # acceptance tests
 glow-native/build/Debug/glow_cli.exe in.png out.png --threshold 25 --radius 60 --intensity 150
 ```
-(The `.aex` build via `ae/DeepGlowGPU.sln` comes online in plan Task 9 / milestone M0.)
+Note: `cmake` is not always on PATH — the VS-bundled one works:
+`"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"`.
+The CUDA parity target (`glow_parity`) builds automatically when CUDA is detected.
+
+## Build the `.aex` (CPU + CUDA GPU)
+
+```
+MSBuild glow-native/ae/DeepGlowGPU.vcxproj /p:Configuration=Release /p:Platform=x64 ^
+        "/p:CudaToolkitDir=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\"
+```
+Output: `glow-native/build-ae/DeepGlowGPU.aex`. Install by copying it into
+`…\Adobe After Effects 2024\Support Files\Plug-ins\` and relaunching AE.
 
 ## Status
 
-🟡 Scaffold in `ae/` + approved spec & plan. Implementation proceeds via the plan
-(M0 loads in AE → M1 CPU look correct → M2 CUDA parity + real-time → M3 cinematic params).
-OpenCL (AMD/Intel) and Mac/Metal are post-v1.
+🟢 **v1 engine + plugin built (M0–M3).** Core mip-pyramid engine is correct (10 acceptance
+tests incl. AC1–AC3). The `.aex` loads in AE 2024, renders a real soft glow on the CPU path,
+and the CUDA GPU path matches the CPU within ~1e-7 (AC4 parity, well under 1e-3). Cinematic
+params (Linear Light / Tonemap / Highlight Compression / anamorphic) are wired through both
+paths.
+
+Remaining polish (tracked): glow bleeding past layer bounds (`PF_OutFlag_I_EXPAND_BUFFER`),
+the `Passes` and `Hue Shift` params (read but not yet applied in the engine), preset-intent
+default tuning, and in-AE real-time/GPU verification on 4K. OpenCL (AMD/Intel) and Mac/Metal
+are post-v1.

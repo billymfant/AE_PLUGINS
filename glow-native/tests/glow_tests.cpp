@@ -125,6 +125,26 @@ static void test_glow_alpha_over_transparent() {
     CHECK(g.at(32,32)[3] >= 1.0f - 1e-3f);  // opaque interior stays opaque
 }
 
+static void test_tonemap_compresses_highlights(){
+    // A strong glow with no tonemap blows past 1.0; soft-clip must pull the
+    // blown-out highlight back down.
+    Image src=whiteSquare(64,64,32);
+    Params a; a.threshold=0.1f; a.intensity=8.f; a.tonemap=TONE_NONE; a.glowOnly=true; a.linearLight=false;
+    Params b=a; b.tonemap=TONE_SOFTCLIP; b.highlightComp=0.9f;
+    float pa=bloom(src,a).at(40,32)[0], pb=bloom(src,b).at(40,32)[0];
+    CHECK(pb < pa);                           // tonemap reduces blown-out highlight
+}
+static void test_anamorphic_horizontal_wider(){
+    // DIM_HORIZONTAL keeps horizontal spread, kills vertical -> the glow streaks
+    // sideways: more energy 30px to the side than 30px above the source.
+    Image src=whiteSquare(128,128,16);
+    Params p; p.threshold=0.1f; p.radius=40.f; p.glowOnly=true; p.linearLight=false; p.tonemap=TONE_NONE;
+    p.dimensions=DIM_HORIZONTAL; Image g=bloom(src,p);
+    int cx=64,cy=64;
+    float horiz=g.at(cx+30,cy)[0], vert=g.at(cx,cy+30)[0];
+    CHECK(horiz > vert);                       // streaks horizontally
+}
+
 int main() {
     test_luma();
     test_bilinear_center();
@@ -134,6 +154,8 @@ int main() {
     test_AC2_soft_round_falloff();
     test_AC3_source_preserved();
     test_glow_alpha_over_transparent();
+    test_tonemap_compresses_highlights();
+    test_anamorphic_horizontal_wider();
     if (g_fail) { printf("%d CHECK(s) failed\n", g_fail); return 1; }
     printf("ALL TESTS PASSED\n"); return 0;
 }
