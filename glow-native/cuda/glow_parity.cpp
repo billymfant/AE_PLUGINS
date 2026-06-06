@@ -35,6 +35,25 @@ static Image makeFixture(int W, int H){
     return im;
 }
 
+// Place a small bright fixture at offset (offX,offY) inside a larger zeroed
+// canvas — the exact thing the AE I_EXPAND_BUFFER path builds (input layer
+// blitted into a larger output-sized canvas, margins transparent black).
+static Image makeOffsetCanvas(int canvasW, int canvasH,
+                              int fixW, int fixH, int offX, int offY){
+    Image canvas(canvasW, canvasH);          // zero-initialised (transparent black)
+    Image fix = makeFixture(fixW, fixH);
+    for (int y=0;y<fixH;++y){
+        int cy=y+offY; if (cy<0||cy>=canvasH) continue;
+        for (int x=0;x<fixW;++x){
+            int cx=x+offX; if (cx<0||cx>=canvasW) continue;
+            const float* s = fix.at(x,y);
+            float* d = canvas.at(cx,cy);
+            d[0]=s[0]; d[1]=s[1]; d[2]=s[2]; d[3]=s[3];
+        }
+    }
+    return canvas;
+}
+
 static float maxDiff(const Image& a, const std::vector<float>& b){
     float m=0.f;
     for (size_t i=0;i<a.px.size();++i){
@@ -44,9 +63,9 @@ static float maxDiff(const Image& a, const std::vector<float>& b){
     return m;
 }
 
-static int runConfig(const char* name, const Params& p, int W, int H, float eps){
-    Image src = makeFixture(W,H);
-
+// Core comparison: run CPU bloom + GPU bloom on the SAME source image.
+static int runSrc(const char* name, const Image& src, const Params& p, float eps){
+    int W = src.w, H = src.h;
     Image cpu = bloom(src, p);
 
     std::vector<float> gpu((size_t)W*H*4, 0.f);
@@ -63,6 +82,10 @@ static int runConfig(const char* name, const Params& p, int W, int H, float eps)
     }
     printf("[%s] PARITY FAIL (max diff = %.3e, eps = %.0e)\n", name, md, eps);
     return 1;
+}
+
+static int runConfig(const char* name, const Params& p, int W, int H, float eps){
+    return runSrc(name, makeFixture(W,H), p, eps);
 }
 
 int main(){
@@ -91,6 +114,23 @@ int main(){
         p.threshold=0.35f; p.thresholdSoft=0.0f; p.radius=120.f; p.colorize=true;
         p.glowR=0.6f; p.glowG=0.8f; p.glowB=1.0f; p.saturation=0.3f;
         fails += runConfig("GLOWONLY_ANAMORPHIC", p, W, H, 1e-3f);
+    }
+
+    // (d) OFFSET/CANVAS — the buffer-expansion fixture: a small bright fixture
+    //     placed at an offset inside a larger zeroed canvas. This proves the
+    //     canvas + pyramid logic the AE I_EXPAND_BUFFER path relies on (the
+    //     glow must spread into the empty margin around the fixture). We run
+    //     the SAME enlarged canvas through CPU bloom and glow_bloom_cuda.
+    {
+        Params p;
+        p.linearLight=false; p.tonemap=TONE_NONE;
+        p.threshold=0.35f; p.thresholdSoft=0.10f; p.radius=60.f; p.levels=0;
+        p.intensity=1.5f; p.blendOp=BLEND_SCREEN; p.dimensions=DIM_BOTH;
+        // Canvas larger than the fixture, fixture pushed off-center so the glow
+        // has asymmetric empty margins to bleed into (left/top vs right/bottom).
+        Image canvas = makeOffsetCanvas(/*canvas*/320,256, /*fix*/96,72,
+                                        /*off*/ 40, 30);
+        fails += runSrc("OFFSET_CANVAS", canvas, p, 1e-3f);
     }
 
     if (fails){ printf("\n%d config(s) FAILED parity\n", fails); return 1; }

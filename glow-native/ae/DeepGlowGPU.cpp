@@ -77,12 +77,16 @@ About(PF_InData* in_data, PF_OutData* out_data,
 /* ================================================================== *
  *  GLOBAL_SETUP — advertise capabilities
  *  NOTE: out_flags / out_flags2 MUST match the PiPL hex values:
- *      out_flags  = PIX_INDEPENDENT | DEEP_COLOR_AWARE        = 0x02000400
+ *      out_flags  = PIX_INDEPENDENT | DEEP_COLOR_AWARE
+ *                   | I_EXPAND_BUFFER                          = 0x02000600
  *      out_flags2 = SMART_RENDER(1<<10) | FLOAT_COLOR_AWARE(1<<12)
  *                   | SUPPORTS_GPU_RENDER_F32(1<<25)
  *                   | SUPPORTS_THREADED_RENDERING(1<<27)      = 0x0A001400
- *  AE refuses the GPU path unless the PiPL OutFlags2 hex matches the code, so
- *  keep DeepGlowGPUPiPL.r in sync (it is set to 0x0A001400).
+ *  AE refuses the effect unless the PiPL OutFlags hex matches the code, so
+ *  keep DeepGlowGPUPiPL.r in sync (out_flags=0x02000600, out_flags2=0x0A001400).
+ *
+ *  I_EXPAND_BUFFER lets us report an output region LARGER than the input layer
+ *  so the glow can spread past the layer's own bounds (the #1 user request).
  * ================================================================== */
 static PF_Err
 GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
@@ -93,7 +97,8 @@ GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
                                       DG_BUILD_VERSION);
 
     out_data->out_flags  = PF_OutFlag_PIX_INDEPENDENT |
-                           PF_OutFlag_DEEP_COLOR_AWARE;
+                           PF_OutFlag_DEEP_COLOR_AWARE |
+                           PF_OutFlag_I_EXPAND_BUFFER;
 
     out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
                            PF_OutFlag2_FLOAT_COLOR_AWARE |
@@ -302,23 +307,42 @@ GetWorldPixelFormat(PF_InData* in_data, PF_OutData* out_data,
 
 
 /* ------------------------------------------------------------------ *
- *  Build a tightly-packed RGBA-float glow::Image from an AE input
- *  world. AE channel order is ARGB; ours is RGBA. Range conversion
- *  depends on depth. Rows are walked by world->rowbytes (NOT w*px).
+ *  Blit an AE input world into a (larger, pre-zeroed) RGBA-float canvas
+ *  at offset (ox,oy). AE channel order is ARGB; ours is RGBA. Range
+ *  conversion depends on depth. Rows are walked by world->rowbytes (NOT
+ *  w*px). Input pixel (ix,iy) lands at canvas (ix+ox, iy+oy).
+ *
+ *  (ox,oy) is in_data->output_origin_{x,y} = "origin of input buffer in
+ *  output buffer" — so the input layer's top-left sits at +(ox,oy) inside
+ *  the expanded output canvas. Canvas pixels outside the input stay the
+ *  zero (transparent black) they were initialised to, giving the glow
+ *  empty space to spread into past the layer edge.
+ *
+ *  Callers must guarantee the input fits: 0 <= ox, ox+w->width <= canvas.w
+ *  (same for y). PreRender's margin outset guarantees this.
  * ------------------------------------------------------------------ */
-static glow::Image
-WorldToImage(const PF_EffectWorld* w, PF_PixelFormat fmt)
+static void
+BlitWorldIntoImage(glow::Image& canvas, const PF_EffectWorld* w,
+                   PF_PixelFormat fmt, int ox, int oy)
 {
-    glow::Image img(w->width, w->height);
     const char* baseRow = reinterpret_cast<const char*>(w->data);
 
     for (int y = 0; y < w->height; ++y) {
+        int cy = y + oy;
+        if (cy < 0 || cy >= canvas.h) continue;
         const char* row = baseRow + (size_t)y * w->rowbytes;
-        float* dst = img.at(0, y);
+
+        // Clamp the destination x-span into the canvas (defensive).
+        int x0 = 0, x1 = w->width;
+        if (ox < 0)               x0 = -ox;
+        if (ox + x1 > canvas.w)   x1 = canvas.w - ox;
+        if (x0 >= x1) continue;
+
+        float* dst = canvas.at(x0 + ox, cy);
 
         if (fmt == PF_PixelFormat_ARGB128) {
             const PF_PixelFloat* s = reinterpret_cast<const PF_PixelFloat*>(row);
-            for (int x = 0; x < w->width; ++x) {
+            for (int x = x0; x < x1; ++x) {
                 dst[0] = s[x].red;    // as-is, do NOT clamp on input (may exceed 1)
                 dst[1] = s[x].green;
                 dst[2] = s[x].blue;
@@ -327,7 +351,7 @@ WorldToImage(const PF_EffectWorld* w, PF_PixelFormat fmt)
             }
         } else if (fmt == PF_PixelFormat_ARGB64) {
             const PF_Pixel16* s = reinterpret_cast<const PF_Pixel16*>(row);
-            for (int x = 0; x < w->width; ++x) {
+            for (int x = x0; x < x1; ++x) {
                 dst[0] = s[x].red   / k16Max;
                 dst[1] = s[x].green / k16Max;
                 dst[2] = s[x].blue  / k16Max;
@@ -336,7 +360,7 @@ WorldToImage(const PF_EffectWorld* w, PF_PixelFormat fmt)
             }
         } else { // PF_PixelFormat_ARGB32 (8-bit)
             const PF_Pixel8* s = reinterpret_cast<const PF_Pixel8*>(row);
-            for (int x = 0; x < w->width; ++x) {
+            for (int x = x0; x < x1; ++x) {
                 dst[0] = s[x].red   / k8Max;
                 dst[1] = s[x].green / k8Max;
                 dst[2] = s[x].blue  / k8Max;
@@ -345,48 +369,36 @@ WorldToImage(const PF_EffectWorld* w, PF_PixelFormat fmt)
             }
         }
     }
-    return img;
 }
 
 
 /* ------------------------------------------------------------------ *
- *  Write a glow::Image (RGBA float 0..1) into an AE output world,
- *  converting back to ARGB at the output depth. The glow image is the
- *  size of the INPUT world; output pixel (ox,oy) maps to glow pixel
- *  (ox - originX, oy - originY) where (originX,originY) is the origin
- *  of the input buffer within the output buffer.
+ *  Write a glow::Image (RGBA float 0..1) into an AE output world 1:1,
+ *  converting back to ARGB at the output depth. The image is already the
+ *  size of the OUTPUT world (the glow was rendered on the output-sized
+ *  canvas), so there is no offset/remap — image (x,y) -> world (x,y).
  * ------------------------------------------------------------------ */
 static void
-ImageToWorld(const glow::Image& img, PF_EffectWorld* w, PF_PixelFormat fmt,
-             int originX, int originY)
+ImageToWorld(const glow::Image& img, PF_EffectWorld* w, PF_PixelFormat fmt)
 {
     char* baseRow = reinterpret_cast<char*>(w->data);
+    int H = w->height < img.h ? w->height : img.h;
+    int W = w->width  < img.w ? w->width  : img.w;
 
-    for (int oy = 0; oy < w->height; ++oy) {
-        int iy = oy - originY;
+    for (int oy = 0; oy < H; ++oy) {
         char* row = baseRow + (size_t)oy * w->rowbytes;
 
         if (fmt == PF_PixelFormat_ARGB128) {
             PF_PixelFloat* d = reinterpret_cast<PF_PixelFloat*>(row);
-            for (int ox = 0; ox < w->width; ++ox) {
-                int ix = ox - originX;
-                if (iy < 0 || iy >= img.h || ix < 0 || ix >= img.w) {
-                    d[ox].alpha = d[ox].red = d[ox].green = d[ox].blue = 0.f;
-                    continue;
-                }
-                const float* s = img.at(ix, iy);
+            for (int ox = 0; ox < W; ++ox) {
+                const float* s = img.at(ox, oy);
                 d[ox].red = s[0]; d[ox].green = s[1]; d[ox].blue = s[2]; // 32f unclamped
                 d[ox].alpha = s[3];
             }
         } else if (fmt == PF_PixelFormat_ARGB64) {
             PF_Pixel16* d = reinterpret_cast<PF_Pixel16*>(row);
-            for (int ox = 0; ox < w->width; ++ox) {
-                int ix = ox - originX;
-                if (iy < 0 || iy >= img.h || ix < 0 || ix >= img.w) {
-                    d[ox].alpha = d[ox].red = d[ox].green = d[ox].blue = 0;
-                    continue;
-                }
-                const float* s = img.at(ix, iy);
+            for (int ox = 0; ox < W; ++ox) {
+                const float* s = img.at(ox, oy);
                 d[ox].red   = (A_u_short)(clamp01(s[0]) * k16Max + 0.5f);
                 d[ox].green = (A_u_short)(clamp01(s[1]) * k16Max + 0.5f);
                 d[ox].blue  = (A_u_short)(clamp01(s[2]) * k16Max + 0.5f);
@@ -394,13 +406,8 @@ ImageToWorld(const glow::Image& img, PF_EffectWorld* w, PF_PixelFormat fmt,
             }
         } else { // PF_PixelFormat_ARGB32 (8-bit)
             PF_Pixel8* d = reinterpret_cast<PF_Pixel8*>(row);
-            for (int ox = 0; ox < w->width; ++ox) {
-                int ix = ox - originX;
-                if (iy < 0 || iy >= img.h || ix < 0 || ix >= img.w) {
-                    d[ox].alpha = d[ox].red = d[ox].green = d[ox].blue = 0;
-                    continue;
-                }
-                const float* s = img.at(ix, iy);
+            for (int ox = 0; ox < W; ++ox) {
+                const float* s = img.at(ox, oy);
                 d[ox].red   = (A_u_char)(clamp01(s[0]) * k8Max + 0.5f);
                 d[ox].green = (A_u_char)(clamp01(s[1]) * k8Max + 0.5f);
                 d[ox].blue  = (A_u_char)(clamp01(s[2]) * k8Max + 0.5f);
@@ -412,21 +419,28 @@ ImageToWorld(const glow::Image& img, PF_EffectWorld* w, PF_PixelFormat fmt,
 
 
 /* ================================================================== *
- *  SMART_PRE_RENDER — checkout input, declare needed region.
+ *  SMART_PRE_RENDER — checkout input, declare expanded output region.
  *
- *  We request exactly AE's output region and report a result_rect that
- *  does NOT exceed it. AE strictly forbids result_rect > request rect in
- *  pre-render (error 25::237) — an earlier version outset the result rect
- *  by the glow radius and hit exactly that. Input and output worlds are
- *  aligned here (origin 0), which the M0 passthrough confirmed renders
- *  correctly, so SmartRender maps 1:1.
- *
- *  DEFERRED: gathering source from beyond the output region and letting
- *  the glow bleed past the layer's own bounds requires the buffer-
- *  expansion path (PF_OutFlag_I_EXPAND_BUFFER + matching PiPL flag); it
- *  is a later look-pass enhancement, not needed for a correct in-bounds
- *  glow. Within-layer / within-comp glow renders fully without it.
+ *  With PF_OutFlag_I_EXPAND_BUFFER set (GlobalSetup + PiPL), the effect
+ *  may report an output region LARGER than the input layer so the glow can
+ *  spread past the layer's own bounds. We:
+ *    1. compute `margin` = ceil(radius) (+ a couple px slack) — the glow's
+ *       spatial reach (the mip pyramid spreads ~radius px).
+ *    2. outset the INPUT checkout request by `margin` so we gather any
+ *       source that bleeds in from neighbours.
+ *    3. report result_rect / max_result_rect = the OUTPUT request OUTSET by
+ *       `margin` (the region the glow fills). WITHOUT I_EXPAND_BUFFER this
+ *       outset re-triggers AE error 25::237; WITH the flag it is allowed.
+ *       AE clamps the reported rect to comp bounds as needed — expected.
  * ================================================================== */
+static void OutsetRect(PF_LRect* r, A_long m)
+{
+    r->left   -= m;
+    r->top    -= m;
+    r->right  += m;
+    r->bottom += m;
+}
+
 static PF_Err
 PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
 {
@@ -438,6 +452,25 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
     // still call the CPU SmartRender when GPU is unavailable/disabled.
     extraP->output->flags |= PF_RenderOutputFlag_GPU_RENDER_POSSIBLE;
 
+    // Glow reach = radius (in px). Read DG_RADIUS directly (float slider).
+    PF_ParamDef radius_param;
+    AEFX_CLR_STRUCT(radius_param);
+    A_long margin = 0;
+    if (PF_CHECKOUT_PARAM(in_data, DG_RADIUS,
+                          in_data->current_time, in_data->time_step,
+                          in_data->time_scale, &radius_param) == PF_Err_NONE) {
+        double radius = radius_param.u.fs_d.value;
+        if (radius > 0.0) {
+            margin = (A_long)ceil(radius) + 2;   // +2px slack for tent/bilinear reach
+        }
+        PF_CHECKIN_PARAM(in_data, &radius_param);
+    }
+
+    // 1+2. Outset the input checkout request by the glow reach so we gather
+    //      source that bleeds in from beyond the requested region.
+    OutsetRect(&req.rect, margin);
+    req.preserve_rgb_of_zero_alpha = FALSE;
+
     ERR(extraP->cb->checkout_layer(in_data->effect_ref,
                                    DG_INPUT,
                                    DG_INPUT,
@@ -448,6 +481,17 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
                                    &in_result));
 
     if (!err) {
+        // 3. Report the EXPANDED output region: the original output request
+        //    outset by the glow reach. This is the region the glow fills and
+        //    is allowed to exceed the input thanks to I_EXPAND_BUFFER.
+        PF_LRect out_rect = extraP->input->output_request.rect;
+        OutsetRect(&out_rect, margin);
+
+        extraP->output->result_rect     = out_rect;
+        extraP->output->max_result_rect = out_rect;
+
+        // Also union in whatever the input actually returned, so we never
+        // report less than the available source (belt-and-suspenders).
         UnionLRect(&in_result.result_rect,     &extraP->output->result_rect);
         UnionLRect(&in_result.max_result_rect, &extraP->output->max_result_rect);
     }
@@ -473,18 +517,23 @@ SmartRenderCPU(PF_InData* in_data, PF_OutData* out_data,
     ERR(GetWorldPixelFormat(in_data, out_data, output_worldP, &out_fmt));
 
     if (!err) {
-        // Build the source image from the (possibly expanded) input world.
-        glow::Image src = WorldToImage(input_worldP, in_fmt);
+        // Render on an OUTPUT-sized canvas so the glow can fill the expanded
+        // margin past the input layer's edge. Canvas starts as transparent
+        // black; the input pixels are blitted in at the input buffer's origin
+        // within the output buffer (output_origin_{x,y}). Per the SDK that is
+        // the position of the input's top-left inside the output, so input
+        // pixel (ix,iy) -> canvas (ix+ox, iy+oy).
+        int ox = (int)in_data->output_origin_x;
+        int oy = (int)in_data->output_origin_y;
 
-        // Run the engine. All glow math lives in core/.
-        glow::Image dst = glow::bloom(src, gp);
+        glow::Image canvas(output_worldP->width, output_worldP->height);  // zeroed
+        BlitWorldIntoImage(canvas, input_worldP, in_fmt, ox, oy);
 
-        // Map: origin of input buffer within the output buffer.
-        // Non-zero only when the buffer was expanded in PreRender.
-        int originX = (int)in_data->output_origin_x;
-        int originY = (int)in_data->output_origin_y;
+        // Run the engine on the full output-sized canvas. All math in core/.
+        glow::Image dst = glow::bloom(canvas, gp);
 
-        ImageToWorld(dst, output_worldP, out_fmt, originX, originY);
+        // dst is already output-sized -> write 1:1, no offset.
+        ImageToWorld(dst, output_worldP, out_fmt);
     }
     return err;
 }
@@ -498,8 +547,10 @@ SmartRenderCPU(PF_InData* in_data, PF_OutData* out_data,
  *  row pitch; we hand the device pointers + pitch (in float4 elements) to
  *  glow_bloom_cuda_gpu, which reuses the EXACT Stage-1 kernels.
  *
- *  Note: input and output GPU worlds are the same size here (PreRender did
- *  not expand the buffer), so no origin remap is needed.
+ *  With I_EXPAND_BUFFER the OUTPUT GPU world may be LARGER than the input;
+ *  the input sits at (output_origin_x, output_origin_y) inside the output.
+ *  We pass both dims + the offset so the device renders the glow on the
+ *  expanded canvas (mirrors the CPU path).
  * ================================================================== */
 static PF_Err
 SmartRenderGPU(PF_InData* in_data, PF_OutData* out_data,
@@ -531,9 +582,14 @@ SmartRenderGPU(PF_InData* in_data, PF_OutData* out_data,
         int srcPitch = input_worldP->rowbytes  / bytes_per_pixel;  // in float4 elements
         int dstPitch = output_worldP->rowbytes / bytes_per_pixel;
 
+        int offX = (int)in_data->output_origin_x;
+        int offY = (int)in_data->output_origin_y;
+
         int rc = glow_bloom_cuda_gpu((const float*)src_mem, (float*)dst_mem,
                                      srcPitch, dstPitch,
-                                     input_worldP->width, input_worldP->height, gp);
+                                     input_worldP->width,  input_worldP->height,
+                                     output_worldP->width, output_worldP->height,
+                                     offX, offY, gp);
         if (rc != 0 || cudaPeekAtLastError() != cudaSuccess) {
             err = PF_Err_INTERNAL_STRUCT_DAMAGED;
         }

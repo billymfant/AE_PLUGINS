@@ -323,14 +323,21 @@ fail:
  *  place: the same kernels prove parity in glow_parity.
  * ================================================================== */
 
-/* pitched BGRA (float4) -> contiguous RGBA (float, w*h*4). */
-__global__ void k_bgra_to_rgba(const float* src, int srcPitch4,
-                               float* dst, int w, int h){
+/* pitched BGRA (float4) input (inW x inH) -> contiguous RGBA (float) canvas
+   (outW x outH), placing the input at offset (offX,offY). The kernel iterates
+   the INPUT extent; the canvas must be pre-zeroed so areas outside the input
+   stay transparent black. */
+__global__ void k_bgra_to_rgba_offset(const float* src, int srcPitch4,
+                                      int inW, int inH,
+                                      float* dst, int outW, int outH,
+                                      int offX, int offY){
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
-    if (x>=w || y>=h) return;
+    if (x>=inW || y>=inH) return;
+    int cx = x + offX, cy = y + offY;
+    if (cx<0 || cx>=outW || cy<0 || cy>=outH) return;
     size_t si = ((size_t)y*srcPitch4 + x)*4;   // float4 element stride -> *4 floats
-    size_t di = ((size_t)y*w + x)*4;
+    size_t di = ((size_t)cy*outW + cx)*4;
     // AE GPU world channel order is B,G,R,A: slot0=B, slot1=G, slot2=R, slot3=A.
     dst[di  ] = src[si+2]; // R
     dst[di+1] = src[si+1]; // G
@@ -354,8 +361,9 @@ __global__ void k_rgba_to_bgra(const float* src, int w, int h,
 
 extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
                                    int srcPitch, int dstPitch,
-                                   int w, int h, const Params& p){
-    if (w<=0 || h<=0 || !srcBGRA || !dstBGRA) return 1;
+                                   int inW, int inH, int outW, int outH,
+                                   int offX, int offY, const Params& p){
+    if (inW<=0 || inH<=0 || outW<=0 || outH<=0 || !srcBGRA || !dstBGRA) return 1;
 
     const dim3 block(16,16);
     cudaError_t err = cudaSuccess;
@@ -369,6 +377,9 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
     float* dGlow  = nullptr;
     float* dOut   = nullptr;
 
+    // All full-res buffers are OUTPUT-sized; the glow renders on the expanded
+    // canvas so it can spread past the input layer edge (mirrors the CPU path).
+    const int w = outW, h = outH;
     size_t full = (size_t)w*h*4*sizeof(float);
 
     CU_TRY(cudaMalloc(&dLin,   full));
@@ -376,12 +387,16 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
     CU_TRY(cudaMalloc(&dGlow,  full));
     CU_TRY(cudaMalloc(&dOut,   full));
     CU_TRY(cudaMemset(dGlow, 0, full));
+    // Zero the canvas first so areas outside the input are transparent black.
+    CU_TRY(cudaMemset(dLin,  0, full));
 
     {
         dim3 g = grid2d(w,h,block);
 
-        // unpack AE BGRA(pitched) -> contiguous RGBA into dLin
-        k_bgra_to_rgba<<<g,block>>>(srcBGRA, srcPitch, dLin, w, h);
+        // unpack AE BGRA(pitched) input (inW x inH) -> RGBA canvas (outW x outH)
+        // at offset (offX,offY). Iterate the INPUT extent.
+        k_bgra_to_rgba_offset<<<grid2d(inW,inH,block),block>>>(
+            srcBGRA, srcPitch, inW, inH, dLin, w, h, offX, offY);
         CU_TRY(cudaGetLastError());
 
         if (p.linearLight){ k_srgb_to_lin<<<g,block>>>(dLin, w, h); CU_TRY(cudaGetLastError()); }
@@ -421,7 +436,7 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
 
         if (p.linearLight){ k_lin_to_srgb<<<g,block>>>(dOut, w, h); CU_TRY(cudaGetLastError()); }
 
-        // pack contiguous RGBA -> AE BGRA(pitched)
+        // pack contiguous RGBA (outW x outH) -> AE BGRA(pitched) output
         k_rgba_to_bgra<<<g,block>>>(dOut, w, h, dstBGRA, dstPitch);
         CU_TRY(cudaGetLastError());
 

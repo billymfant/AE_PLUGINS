@@ -35,19 +35,26 @@ int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut, int w, int h, const glo
  *
  *  Operates on DEVICE pointers handed to us by AE's GPU world suite. AE GPU
  *  worlds are float4 in B,G,R,A channel order with a row pitch (in float4
- *  elements, i.e. rowbytes/16). This routine:
- *    - packs the BGRA pitched input into a contiguous RGBA scratch buffer,
- *    - runs the SAME pyramid bloom as glow_bloom_cuda (identical kernels/math),
- *    - writes the RGBA result back out as BGRA into the pitched output buffer.
+ *  elements, i.e. rowbytes/16). With PF_OutFlag_I_EXPAND_BUFFER the OUTPUT
+ *  world may be LARGER than the input; the input sits at offset (offX,offY)
+ *  inside the output. This routine:
+ *    - allocates an OUTPUT-sized contiguous RGBA device canvas, memset 0,
+ *    - unpacks the pitched BGRA input into that canvas at (offX,offY),
+ *    - runs the SAME pyramid bloom as glow_bloom_cuda (identical kernels/math)
+ *      at outW x outH,
+ *    - writes the RGBA result back out as BGRA into the pitched output buffer
+ *      (outW x outH).
  *
  *  src/dst are device pointers (already in the active CUDA context). srcPitch/
- *  dstPitch are in float4 elements. Returns 0 on success, nonzero on CUDA error.
- *  Does NOT call cudaDeviceSynchronize for the caller; it synchronizes
- *  internally so results are valid on return (mirrors the SDK sample).
+ *  dstPitch are in float4 elements. inW/inH are the input world dims; outW/outH
+ *  the output (expanded) world dims; offX/offY = in_data->output_origin_{x,y}.
+ *  Returns 0 on success, nonzero on CUDA error. Synchronizes internally so
+ *  results are valid on return (mirrors the SDK sample).
  */
 int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
                         int srcPitch, int dstPitch,
-                        int w, int h, const glow::Params& p);
+                        int inW, int inH, int outW, int outH,
+                        int offX, int offY, const glow::Params& p);
 
 #ifdef __cplusplus
 } // extern "C"
