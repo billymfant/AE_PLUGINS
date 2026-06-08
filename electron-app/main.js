@@ -25,7 +25,9 @@ function createWindow() {
     maximizable: false,
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // Deep Glow panel is the active tool under development. Color Lab's
+  // renderer/index.html remains for the future unified suite switcher.
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'glow.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
 }
 
@@ -34,6 +36,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('ae:apply', async (_e, params) => {
     return await bridge.applyColorGrade(params);
+  });
+
+  ipcMain.handle('glow:apply', async (_e, params) => {
+    return await bridge.applyGlow(params);
   });
 
   ipcMain.handle('ae:status', async () => {

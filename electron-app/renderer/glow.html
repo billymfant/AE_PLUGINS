@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline';" />
+<title>Deep Glow</title>
+<style>
+  :root{
+    --bg:#14161b; --panel:#1b1e25; --panel2:#22262f; --line:#2c313b;
+    --text:#d6dae3; --muted:#7a818e; --accent:#46d3e6; --accent2:#7b8cff;
+    --accentdim:#1f3a40; --danger:#ff5d6c; --ok:#4ade80;
+    --radius:10px; --h:30px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font:12px/1.4 -apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-user-select:none; user-select:none; overflow:hidden;
+  }
+  /* ── titlebar ─────────────────────────────────────────── */
+  .titlebar{
+    height:38px; display:flex; align-items:center; gap:10px; padding:0 10px;
+    -webkit-app-region:drag; border-bottom:1px solid var(--line); background:var(--bg);
+  }
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.12em;font-size:11px}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .ae-status{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px;-webkit-app-region:no-drag}
+  .ae-status .s{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+  .ae-status.ok .s{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .ae-status.bad .s{background:var(--danger)}
+  .winbtns{display:flex;gap:4px;-webkit-app-region:no-drag}
+  .winbtns button{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-size:13px}
+  .winbtns button:hover{background:var(--panel2);color:var(--text)}
+  /* ── scroll body ──────────────────────────────────────── */
+  .scroll{position:absolute;top:38px;bottom:54px;left:0;right:0;overflow-y:auto;padding:12px}
+  .scroll::-webkit-scrollbar{width:8px}
+  .scroll::-webkit-scrollbar-thumb{background:var(--panel2);border-radius:8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px;margin-bottom:12px}
+  .card h2{margin:0 0 10px;font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;font-weight:700}
+  /* ── Glow Selection widget ────────────────────────────── */
+  .sel-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .sel-head h2{margin:0}
+  .seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px;margin-left:auto}
+  .seg button{border:0;background:transparent;color:var(--muted);padding:4px 9px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:600;letter-spacing:.03em}
+  .seg button.on{background:var(--accentdim);color:var(--accent)}
+  .canvas-wrap{position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+  canvas{display:block;width:100%;height:150px;cursor:crosshair}
+  .sel-foot{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .iconbtn{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:5px 9px;border-radius:7px;cursor:pointer;font-size:11px}
+  .iconbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accentdim)}
+  .iconbtn:hover{border-color:var(--accent2)}
+  .toggle{display:flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;color:var(--text)}
+  .toggle input{display:none}
+  .toggle .tk{width:32px;height:18px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);position:relative;transition:.15s}
+  .toggle .tk::after{content:"";position:absolute;top:1px;left:1px;width:14px;height:14px;border-radius:50%;background:var(--muted);transition:.15s}
+  .toggle input:checked + .tk{background:var(--accentdim);border-color:var(--accent)}
+  .toggle input:checked + .tk::after{background:var(--accent);transform:translateX(14px)}
+  .readouts{margin-left:auto;display:flex;gap:12px;color:var(--muted);font-size:10px}
+  .readouts b{color:var(--text);font-weight:600}
+  /* ── control rows ─────────────────────────────────────── */
+  .row{display:flex;align-items:center;gap:10px;margin:9px 0}
+  .row label{width:96px;color:var(--muted);font-size:11px;flex:none}
+  .row .val{width:42px;text-align:right;color:var(--text);font-variant-numeric:tabular-nums;font-size:11px}
+  input[type=range]{-webkit-appearance:none;flex:1;height:4px;border-radius:3px;background:var(--panel2);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 0 3px rgba(70,211,230,.15)}
+  select{flex:1;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:7px;height:var(--h);padding:0 8px;font-size:11px}
+  input[type=color]{width:34px;height:26px;border:1px solid var(--line);border-radius:6px;background:none;padding:2px;cursor:pointer}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:5px 10px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);cursor:pointer;font-size:11px}
+  .chip.on{border-color:var(--accent);color:var(--accent);background:var(--accentdim)}
+  /* ── footer ───────────────────────────────────────────── */
+  .footer{position:absolute;bottom:0;left:0;right:0;height:54px;display:flex;align-items:center;gap:10px;
+    padding:0 12px;border-top:1px solid var(--line);background:var(--bg)}
+  .apply{flex:1;height:34px;border:0;border-radius:9px;background:linear-gradient(90deg,var(--accent),var(--accent2));
+    color:#06222a;font-weight:700;letter-spacing:.03em;cursor:pointer;font-size:12px}
+  .apply:active{transform:translateY(1px)}
+  .apply:disabled{opacity:.5;cursor:default}
+  .msg{font-size:10px;color:var(--muted);min-height:12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .msg.err{color:var(--danger)}
+  .msg.ok{color:var(--ok)}
+</style>
+</head>
+<body>
+  <div class="titlebar">
+    <div class="brand"><span class="dot"></span>DEEP GLOW</div>
+    <div class="ae-status" id="aeStatus"><span class="s"></span><span id="aeText">checking AE…</span></div>
+    <div class="winbtns">
+      <button id="min" title="Minimize">—</button>
+      <button id="close" title="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="scroll">
+    <!-- ── Glow Selection (the star) ─────────────────────── -->
+    <div class="card">
+      <div class="sel-head">
+        <h2>Glow Selection</h2>
+        <div class="seg" id="modeSeg">
+          <button data-mode="1" class="on">Luma</button>
+          <button data-mode="2">Sat</button>
+          <button data-mode="3">Hue</button>
+        </div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="selCanvas" width="416" height="150"></canvas>
+      </div>
+      <div class="sel-foot">
+        <button class="iconbtn" id="eyedrop" title="Pick a value, then click the strip to center the band">⌖ Pick</button>
+        <label class="toggle"><input type="checkbox" id="invert"><span class="tk"></span>Invert</label>
+        <div class="readouts">
+          <span>Low <b id="roLow">80</b></span>
+          <span>High <b id="roHigh">255</b></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Glow ──────────────────────────────────────────── -->
+    <div class="card">
+      <h2>Glow</h2>
+      <div class="row"><label>Intensity</label><input type="range" data-p="intensity" min="0" max="1000" step="1"><span class="val" data-v="intensity"></span></div>
+      <div class="row"><label>Radius</label><input type="range" data-p="radius" min="0" max="500" step="1"><span class="val" data-v="radius"></span></div>
+      <div class="row"><label>Source Gain</label><input type="range" data-p="sourceGain" min="0" max="400" step="1"><span class="val" data-v="sourceGain"></span></div>
+      <div class="row"><label>Threshold</label><input type="range" data-p="threshold" min="0" max="255" step="1"><span class="val" data-v="threshold"></span></div>
+      <div class="row"><label>Thr. Soft</label><input type="range" data-p="thresholdSoft" min="0" max="100" step="1"><span class="val" data-v="thresholdSoft"></span></div>
+    </div>
+
+    <!-- ── Color ─────────────────────────────────────────── -->
+    <div class="card">
+      <h2>Color</h2>
+      <div class="row"><label>Glow Color</label><input type="color" id="glowColor" value="#ffffff"><label class="toggle" style="margin-left:auto"><input type="checkbox" id="colorize"><span class="tk"></span>Colorize</label></div>
+      <div class="row"><label>Saturation</label><input type="range" data-p="saturation" min="-100" max="100" step="1"><span class="val" data-v="saturation"></span></div>
+      <div class="row"><label>Hue Shift</label><input type="range" data-p="hueShift" min="-180" max="180" step="1"><span class="val" data-v="hueShift"></span></div>
+    </div>
+
+    <!-- ── Shape ─────────────────────────────────────────── -->
+    <div class="card">
+      <h2>Shape</h2>
+      <div class="row"><label>Falloff</label>
+        <select data-p="falloff"><option value="1">Linear</option><option value="2">Soft</option><option value="3">Exponential</option></select></div>
+      <div class="row"><label>Blend</label>
+        <select data-p="blend"><option value="1">Add</option><option value="2">Screen</option></select></div>
+      <div class="row"><label>Dimensions</label>
+        <div class="chips" id="dimChips" style="flex:1">
+          <span class="chip on" data-dim="1">Both</span><span class="chip" data-dim="2">Horizontal</span><span class="chip" data-dim="3">Vertical</span>
+        </div></div>
+    </div>
+
+    <!-- ── Render ────────────────────────────────────────── -->
+    <div class="card">
+      <h2>Render</h2>
+      <div class="row"><label>Tonemap</label>
+        <select data-p="tonemap"><option value="1">None</option><option value="2">Soft-clip</option><option value="3">Filmic</option></select></div>
+      <div class="row"><label>Highlight Cmp</label><input type="range" data-p="highlightComp" min="0" max="100" step="1"><span class="val" data-v="highlightComp"></span></div>
+      <div class="row" style="gap:16px">
+        <label class="toggle"><input type="checkbox" id="linearLight" checked><span class="tk"></span>Linear Light</label>
+        <label class="toggle"><input type="checkbox" id="glowOnly"><span class="tk"></span>Glow Only</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <label class="toggle"><input type="checkbox" id="auto" checked><span class="tk"></span>Auto</label>
+    <button class="apply" id="applyBtn">Apply Glow</button>
+    <span class="msg" id="msg"></span>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = s => document.querySelector(s);
+
+  // ── Param state (UI units == AE param units) ────────────
+  const state = {
+    intensity:150, radius:60, threshold:80, thresholdSoft:20,
+    rangeMode:1, rangeHigh:255, rangeHighSoft:0, invertRange:false,
+    sourceGain:100, glowColor:[1,1,1], colorize:false,
+    saturation:0, hueShift:0, passes:2, falloff:2, blend:2,
+    dimensions:1, glowOnly:false, linearLight:true, tonemap:2, highlightComp:0
+  };
+
+  // ════════════════════════════════════════════════════════
+  //  Interactive Glow Selection widget
+  //  A trapezoidal band over a mode-specific gradient strip.
+  //  Four draggable x-positions map 1:1 to the engine params:
+  //    lowFoot = threshold-thresholdSoft   lowKnee = threshold
+  //    highKnee = rangeHigh                highFoot = rangeHigh+rangeHighSoft
+  //  (all in 0..255 UI units; softness clamped to 0..100)
+  // ════════════════════════════════════════════════════════
+  const GlowSelection = (function(){
+    const cv = $("#selCanvas"), ctx = cv.getContext("2d");
+    let W=cv.width, H=cv.height, dragging=null, eyedrop=false, onChange=()=>{};
+    const PAD=2, railTop=18, railBot=H-22, IMAX=400;   // IMAX = intensity at full band height
+    // band top Y reflects Intensity (up = stronger glow); slider still allows >IMAX
+    const bandTopY = () => railBot - Math.max(0,Math.min(IMAX,state.intensity))/IMAX*(railBot-railTop);
+    const intOfY  = y => Math.max(0,Math.min(IMAX, (railBot-y)/(railBot-railTop)*IMAX));
+
+    function fit(){
+      const r = cv.getBoundingClientRect();
+      const dpr = window.devicePixelRatio||1;
+      cv.width = Math.round(r.width*dpr); cv.height = Math.round(150*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      W=r.width; H=150; draw();
+    }
+    const xOf = v => PAD + (v/255)*(W-2*PAD);          // value 0..255 -> px
+    const vOf = x => Math.max(0,Math.min(255,((x-PAD)/(W-2*PAD))*255));
+
+    // gradient color at normalised t (0..1) for the active mode
+    function stripStyle(){
+      const g = ctx.createLinearGradient(0,0,W,0);
+      if (state.rangeMode===3){ // Hue spectrum
+        for(let i=0;i<=12;i++) g.addColorStop(i/12, `hsl(${i/12*360},80%,55%)`);
+      } else if (state.rangeMode===2){ // Saturation: gray -> vivid
+        g.addColorStop(0,"hsl(200,0%,55%)"); g.addColorStop(1,"hsl(200,90%,55%)");
+      } else { // Luminance: black -> white
+        g.addColorStop(0,"#050608"); g.addColorStop(1,"#f4f7ff");
+      }
+      return g;
+    }
+
+    function handles(){
+      // returns the four band x-positions in value units
+      const lowKnee = state.threshold;
+      const lowFoot = Math.max(0, state.threshold - state.thresholdSoft);
+      const highKnee= state.rangeHigh;
+      const highFoot= Math.min(255, state.rangeHigh + state.rangeHighSoft);
+      return {lowFoot,lowKnee,highKnee,highFoot};
+    }
+
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      // gradient strip
+      ctx.fillStyle = stripStyle();
+      ctx.fillRect(PAD,railTop,W-2*PAD,railBot-railTop);
+      // decorative distribution backdrop (placeholder until real AE histogram)
+      ctx.fillStyle="rgba(0,0,0,.28)";
+      ctx.beginPath(); ctx.moveTo(PAD,railBot);
+      for(let x=0;x<=W;x+=4){
+        const t=x/W;
+        const h=(Math.exp(-Math.pow((t-0.42)/0.16,2))*0.7 + Math.exp(-Math.pow((t-0.8)/0.08,2))*0.45);
+        ctx.lineTo(PAD+x,railBot-(railBot-railTop)*h*0.9);
+      }
+      ctx.lineTo(W-PAD,railBot); ctx.closePath(); ctx.fill();
+
+      const {lowFoot,lowKnee,highKnee,highFoot}=handles();
+      const xLF=xOf(lowFoot),xLK=xOf(lowKnee),xHK=xOf(highKnee),xHF=xOf(highFoot);
+
+      // selection trapezoid (ramp up, plateau at intensity height, ramp down)
+      const yTop=bandTopY();
+      ctx.beginPath();
+      ctx.moveTo(xLF,railBot); ctx.lineTo(xLK,yTop);
+      ctx.lineTo(xHK,yTop); ctx.lineTo(xHF,railBot); ctx.closePath();
+      if(!state.invertRange){
+        ctx.fillStyle="rgba(70,211,230,.18)"; ctx.fill();
+        ctx.strokeStyle="rgba(70,211,230,.95)"; ctx.lineWidth=1.5; ctx.stroke();
+      } else {
+        // shade OUTSIDE the band
+        ctx.save(); ctx.beginPath(); ctx.rect(PAD,railTop,W-2*PAD,railBot-railTop);
+        ctx.fillStyle="rgba(123,140,255,.20)"; ctx.fill("evenodd");
+        ctx.restore();
+        ctx.strokeStyle="rgba(123,140,255,.9)"; ctx.lineWidth=1.5; ctx.stroke();
+      }
+      // dim the unselected sides
+      ctx.fillStyle="rgba(8,9,12,.55)";
+      ctx.fillRect(PAD,railTop,xLF-PAD,railBot-railTop);
+      ctx.fillRect(xHF,railTop,W-PAD-xHF,railBot-railTop);
+
+      // handles
+      const hd=(x,col)=>{ ctx.fillStyle=col; roundRect(x-4,railTop-8,8,railBot-railTop+16,3); ctx.fill();
+                          ctx.fillStyle="#0c0e12"; ctx.fillRect(x-0.5,railTop-2,1,railBot-railTop+4); };
+      const c = state.invertRange ? "#7b8cff":"#46d3e6";
+      hd(xLK,c); hd(xHK,c);
+      // soft-foot grips
+      ctx.fillStyle="rgba(255,255,255,.5)";
+      grip(xLF,railBot+6); grip(xHF,railBot+6);
+      // intensity grip on the plateau top edge (drag up/down = stronger/weaker)
+      const midX=(xLK+xHK)/2;
+      ctx.fillStyle=c; ctx.beginPath(); ctx.arc(midX,yTop,4.5,0,7); ctx.fill();
+      ctx.fillStyle="rgba(214,218,227,.6)"; ctx.font="9px sans-serif"; ctx.textAlign="center";
+      ctx.fillText("⇅ "+Math.round(state.intensity)+"%", midX, Math.max(10,yTop-7));
+    }
+    function roundRect(x,y,w,h,r){ ctx.beginPath();
+      ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+    function grip(x,y){ ctx.beginPath(); ctx.moveTo(x-4,y); ctx.lineTo(x+4,y); ctx.lineTo(x,y-5); ctx.closePath(); ctx.fill(); }
+
+    function pick(mx){
+      const {lowFoot,lowKnee,highKnee,highFoot}=handles();
+      const cand=[["lowKnee",xOf(lowKnee)],["highKnee",xOf(highKnee)],["lowFoot",xOf(lowFoot)],["highFoot",xOf(highFoot)]];
+      let best=null,bd=14;
+      for(const[name,x]of cand){const d=Math.abs(mx-x); if(d<bd){bd=d;best=name;}}
+      return best;
+    }
+    function apply(name,v){
+      if(name==="lowKnee"){ state.threshold=Math.min(v,state.rangeHigh); }
+      else if(name==="highKnee"){ state.rangeHigh=Math.max(v,state.threshold); }
+      else if(name==="lowFoot"){ state.thresholdSoft=Math.max(0,Math.min(100,state.threshold-v)); }
+      else if(name==="highFoot"){ state.rangeHighSoft=Math.max(0,Math.min(100,v-state.rangeHigh)); }
+    }
+    function evX(e){ const r=cv.getBoundingClientRect(); return (e.clientX-r.left); }
+    function evY(e){ const r=cv.getBoundingClientRect(); return (e.clientY-r.top)*(150/r.height); }
+
+    cv.addEventListener("mousedown",e=>{
+      const x=evX(e);
+      if(eyedrop){ centerBand(vOf(x)); eyedrop=false; $("#eyedrop").classList.remove("on"); fireSync(); return; }
+      dragging = pick(x) || "band";
+      if(dragging==="band"){ dragging={mode:"band",start:vOf(x),startY:evY(e),lo:state.threshold,hi:state.rangeHigh,i0:state.intensity}; }
+      onMove(e);
+    });
+    window.addEventListener("mousemove",e=>{ if(dragging) onMove(e); });
+    window.addEventListener("mouseup",()=>{ if(dragging){dragging=null;} });
+    function onMove(e){
+      const v=vOf(evX(e));
+      if(typeof dragging==="object"){ // move whole band: x = slide range, y = intensity
+        const d=v-dragging.start, w=dragging.hi-dragging.lo;
+        let lo=dragging.lo+d, hi=dragging.hi+d;
+        if(lo<0){lo=0;hi=w;} if(hi>255){hi=255;lo=255-w;}
+        state.threshold=lo; state.rangeHigh=hi;
+        state.intensity=Math.round(intOfY(evY(e)));   // vertical drag -> intensity
+      } else { apply(dragging,v); }
+      fireSync();
+    }
+    function centerBand(v){ const half=22; state.threshold=Math.max(0,v-half); state.rangeHigh=Math.min(255,v+half);
+      state.thresholdSoft=14; state.rangeHighSoft=14; }
+    function fireSync(){ draw(); onChange(); }
+
+    return {
+      draw, fit,
+      setMode(m){ state.rangeMode=m; draw(); },
+      setEyedrop(on){ eyedrop=on; },
+      on(cb){ onChange=cb; }
+    };
+  })();
+
+  // ── bind generic slider/select controls ────────────────
+  function syncControlsFromState(){
+    document.querySelectorAll("[data-p]").forEach(el=>{
+      const p=el.dataset.p; if(state[p]!==undefined) el.value=state[p];
+    });
+    document.querySelectorAll("[data-v]").forEach(el=>{ el.textContent=state[el.dataset.v]; });
+    $("#roLow").textContent=Math.round(state.threshold);
+    $("#roHigh").textContent=Math.round(state.rangeHigh);
+  }
+  document.querySelectorAll("[data-p]").forEach(el=>{
+    el.addEventListener("input",()=>{
+      const p=el.dataset.p; state[p]= (el.type==="range"||el.tagName==="SELECT") ? Number(el.value):el.value;
+      const v=document.querySelector(`[data-v="${p}"]`); if(v) v.textContent=state[p];
+      scheduleApply();
+    });
+  });
+
+  // mode segmented
+  $("#modeSeg").addEventListener("click",e=>{
+    const b=e.target.closest("[data-mode]"); if(!b)return;
+    $("#modeSeg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); GlowSelection.setMode(Number(b.dataset.mode)); scheduleApply();
+  });
+  // dimensions chips
+  $("#dimChips").addEventListener("click",e=>{
+    const c=e.target.closest("[data-dim]"); if(!c)return;
+    $("#dimChips").querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));
+    c.classList.add("on"); state.dimensions=Number(c.dataset.dim); scheduleApply();
+  });
+  // checkboxes
+  const cbox=(id,key)=>$("#"+id).addEventListener("change",e=>{ state[key]=e.target.checked; scheduleApply(); });
+  cbox("invert","invertRange"); cbox("colorize","colorize");
+  cbox("linearLight","linearLight"); cbox("glowOnly","glowOnly");
+  $("#invert").addEventListener("change",()=>GlowSelection.draw());
+  // glow color
+  $("#glowColor").addEventListener("input",e=>{
+    const h=e.target.value; state.glowColor=[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255];
+    scheduleApply();
+  });
+  // eyedropper
+  $("#eyedrop").addEventListener("click",()=>{
+    const on=!$("#eyedrop").classList.contains("on");
+    $("#eyedrop").classList.toggle("on",on); GlowSelection.setEyedrop(on);
+  });
+
+  // widget -> state -> readouts -> apply
+  GlowSelection.on(()=>{ $("#roLow").textContent=Math.round(state.threshold);
+    $("#roHigh").textContent=Math.round(state.rangeHigh);
+    document.querySelector('[data-p="threshold"]').value=state.threshold;
+    document.querySelector('[data-v="threshold"]').textContent=Math.round(state.threshold);
+    document.querySelector('[data-p="thresholdSoft"]').value=state.thresholdSoft;
+    document.querySelector('[data-v="thresholdSoft"]').textContent=Math.round(state.thresholdSoft);
+    document.querySelector('[data-p="intensity"]').value=state.intensity;
+    document.querySelector('[data-v="intensity"]').textContent=Math.round(state.intensity);
+    scheduleApply(); });
+  // redraw the band when the Intensity slider changes (height reflects it)
+  document.querySelector('[data-p="intensity"]').addEventListener('input',()=>GlowSelection.draw());
+
+  // ── AE apply (debounced) ────────────────────────────────
+  let timer=null, busy=false, pending=false;
+  function scheduleApply(){ if(!$("#auto").checked) return;
+    clearTimeout(timer); timer=setTimeout(runApply,160); }
+  async function runApply(){
+    if(busy){ pending=true; return; }
+    busy=true; setMsg("applying…","");
+    try{
+      const res=await window.electronAPI.applyGlow(state);
+      if(res&&res.error) setMsg(res.error,"err"); else setMsg("applied → "+(res&&res.layer||"layer"),"ok");
+    }catch(e){ setMsg(String(e&&e.message||e),"err"); }
+    busy=false;
+    if(pending){ pending=false; runApply(); }
+  }
+  $("#applyBtn").addEventListener("click",runApply);
+  function setMsg(t,c){ const m=$("#msg"); m.textContent=t; m.className="msg "+(c||""); }
+
+  // ── AE status ───────────────────────────────────────────
+  async function poll(){
+    try{ const s=await window.electronAPI.checkAE();
+      const el=$("#aeStatus");
+      if(s&&s.running){ el.className="ae-status ok"; $("#aeText").textContent="AE "+(s.version||"connected"); }
+      else { el.className="ae-status bad"; $("#aeText").textContent="AE not running"; }
+    }catch(e){ $("#aeStatus").className="ae-status bad"; $("#aeText").textContent="AE error"; }
+  }
+
+  // window controls
+  $("#min").addEventListener("click",()=>window.electronAPI.minimize());
+  $("#close").addEventListener("click",()=>window.electronAPI.close());
+
+  // init
+  window.addEventListener("resize",()=>GlowSelection.fit());
+  syncControlsFromState();
+  GlowSelection.fit();
+  poll(); setInterval(poll,4000);
+})();
+</script>
+</body>
+</html>

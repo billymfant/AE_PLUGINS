@@ -14,6 +14,10 @@ class AEBridge {
       path.join(__dirname, '..', 'jsx', 'colorlab.jsx'),
       'utf8'
     );
+    this.glowJsx = fs.readFileSync(
+      path.join(__dirname, '..', 'jsx', 'glow.jsx'),
+      'utf8'
+    );
   }
 
   // ── Check if AE is running via COM ─────────────────────────
@@ -39,13 +43,15 @@ class AEBridge {
   }
 
   // ── Build the JSX that AE will execute ─────────────────────
-  _buildScript(params) {
+  //   libSrc   : the tool's ExtendScript library source
+  //   callExpr : the invocation, e.g. "ColorLab.apply(params)"
+  _buildScript(libSrc, callExpr, params) {
     const resultFwd = this.resultPath.replace(/\\/g, '/');
     return `(function() {
   try {
-    ${this.colorlabJsx}
+    ${libSrc}
     var params = ${JSON.stringify(params)};
-    var result = ColorLab.apply(params);
+    var result = ${callExpr};
     var f = new File("${resultFwd}");
     f.open('w');
     f.write(JSON.stringify(result || { ok: true }));
@@ -60,9 +66,16 @@ class AEBridge {
 `;
   }
 
-  // ── Execute JSX in AE + read result ─────────────────────────
-  async applyColorGrade(params) {
-    const jsx = this._buildScript(params);
+  // ── Public tool entry points ───────────────────────────────
+  applyColorGrade(params) {
+    return this._run(this._buildScript(this.colorlabJsx, 'ColorLab.apply(params)', params));
+  }
+  applyGlow(params) {
+    return this._run(this._buildScript(this.glowJsx, 'DeepGlow.apply(params)', params));
+  }
+
+  // ── Execute a built JSX string in AE + read its result ─────
+  async _run(jsx) {
     fs.writeFileSync(this.scriptPath, jsx, 'utf8');
     if (fs.existsSync(this.resultPath)) fs.unlinkSync(this.resultPath);
 
