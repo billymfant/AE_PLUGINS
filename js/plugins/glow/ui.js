@@ -19,14 +19,163 @@ window.GlowUI = (function() {
     sourceGain:         100,
     thresholdSoftness:  20,
     glowOnly:           false,
-    useController:      true
+    useController:      true,
+    glowDimensions:     'both',
+    // --- native-engine fields (DeepGlowGPU.aex) ---
+    rangeMode:          1,      // 1 Luminance, 2 Saturation, 3 Hue
+    rangeHigh:          255,    // 0..255 upper edge (255 = open top)
+    rangeHighSoft:      0,      // 0..100 upper feather
+    invertRange:        false,
+    linearLight:        true,
+    tonemap:            2,      // 1 None, 2 Soft-clip, 3 Filmic
+    highlightComp:      0       // 0..100
   };
 
   function getParams() { return Utils.deepClone(_state); }
 
   var _sliders = {};
   var _falloffGroup, _blendDD, _qualityGroup, _glowColor, _colorizeToggle, _status;
-  var _glowOnlyToggle, _useControllerToggle;
+  var _glowOnlyToggle, _useControllerToggle, _stretchGroup;
+  var _glowSel, _rangeModeGroup, _invertToggle, _tonemapDD, _linearToggle;
+
+  // Debounced live-apply: pushes params to the native effect (which is reused on
+  // the layer) so dragging the widget/sliders updates the glow in-host.
+  var _liveTimer = null;
+  function _applyLive() {
+    if (_liveTimer) clearTimeout(_liveTimer);
+    _liveTimer = setTimeout(function() {
+      Bridge.call('glow.apply', getParams()).then(function(r) {
+        if (_status) {
+          if (r && r.error) { _status.className = 'status-bar error';   _status.textContent = r.error; }
+          else              { _status.className = 'status-bar success'; _status.textContent = 'Glow updated.'; }
+        }
+      }).catch(function(e) { if (_status) { _status.className = 'status-bar error'; _status.textContent = e.message; } });
+    }, 160);
+  }
+
+  // ── Interactive Glow Selection widget ───────────────────────
+  // A trapezoidal band over a mode gradient strip. The four x-grips map 1:1 to
+  // the native params: lowKnee=Threshold, lowFoot=Threshold Softness,
+  // highKnee=Range High, highFoot=Range High Softness. Dragging the band:
+  // left/right slides the range, up/down sets Intensity (plateau height).
+  function makeGlowSelection(state, onCommit, syncSliders) {
+    var cv = Utils.el('canvas', { class: 'glow-select' });
+    cv.style.width = '100%'; cv.style.height = '150px'; cv.style.display = 'block';
+    cv.style.borderRadius = '8px'; cv.style.cursor = 'crosshair';
+    var ctx = cv.getContext('2d');
+    var W = 300, H = 150, PAD = 2, railTop = 18, railBot = H - 22, IMAX = 400;
+    var dragging = null, eyedrop = false;
+
+    function fit() {
+      var r = cv.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      var w = r.width || 300;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(150 * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      W = w; H = 150; draw();
+    }
+    function xOf(v){ return PAD + (v / 255) * (W - 2 * PAD); }
+    function vOf(x){ return Math.max(0, Math.min(255, ((x - PAD) / (W - 2 * PAD)) * 255)); }
+    function bandTopY(){ return railBot - Math.max(0, Math.min(IMAX, state.intensity)) / IMAX * (railBot - railTop); }
+    function intOfY(y){ return Math.max(0, Math.min(IMAX, (railBot - y) / (railBot - railTop) * IMAX)); }
+
+    function stripStyle() {
+      var g = ctx.createLinearGradient(0, 0, W, 0), i;
+      if (state.rangeMode === 3) { for (i = 0; i <= 12; i++) g.addColorStop(i / 12, 'hsl(' + (i / 12 * 360) + ',80%,55%)'); }
+      else if (state.rangeMode === 2) { g.addColorStop(0, 'hsl(200,0%,55%)'); g.addColorStop(1, 'hsl(200,90%,55%)'); }
+      else { g.addColorStop(0, '#050608'); g.addColorStop(1, '#f4f7ff'); }
+      return g;
+    }
+    function handles() {
+      return {
+        lowFoot:  Math.max(0,   state.threshold - state.thresholdSoftness),
+        lowKnee:  state.threshold,
+        highKnee: state.rangeHigh,
+        highFoot: Math.min(255, state.rangeHigh + state.rangeHighSoft)
+      };
+    }
+    function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+    function grip(x, y) { ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.lineTo(x, y - 5); ctx.closePath(); ctx.fill(); }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = stripStyle(); ctx.fillRect(PAD, railTop, W - 2 * PAD, railBot - railTop);
+      // decorative distribution backdrop (placeholder until real AE histogram)
+      ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.moveTo(PAD, railBot);
+      for (var x = 0; x <= W; x += 4) { var t = x / W;
+        var h = Math.exp(-Math.pow((t - 0.42) / 0.16, 2)) * 0.7 + Math.exp(-Math.pow((t - 0.8) / 0.08, 2)) * 0.45;
+        ctx.lineTo(PAD + x, railBot - (railBot - railTop) * h * 0.9); }
+      ctx.lineTo(W - PAD, railBot); ctx.closePath(); ctx.fill();
+
+      var hd = handles();
+      var xLF = xOf(hd.lowFoot), xLK = xOf(hd.lowKnee), xHK = xOf(hd.highKnee), xHF = xOf(hd.highFoot);
+      var yTop = bandTopY();
+      ctx.beginPath(); ctx.moveTo(xLF, railBot); ctx.lineTo(xLK, yTop); ctx.lineTo(xHK, yTop); ctx.lineTo(xHF, railBot); ctx.closePath();
+      var accent = state.invertRange ? '#7b8cff' : '#46d3e6';
+      if (!state.invertRange) { ctx.fillStyle = 'rgba(70,211,230,.18)'; ctx.fill(); }
+      ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = 'rgba(8,9,12,.55)';
+      ctx.fillRect(PAD, railTop, xLF - PAD, railBot - railTop);
+      ctx.fillRect(xHF, railTop, W - PAD - xHF, railBot - railTop);
+      if (state.invertRange) { ctx.fillStyle = 'rgba(123,140,255,.16)';
+        ctx.fillRect(PAD, railTop, xLF - PAD, railBot - railTop); ctx.fillRect(xHF, railTop, W - PAD - xHF, railBot - railTop); }
+      // knee handles
+      function knee(x) { ctx.fillStyle = accent; rr(x - 4, railTop - 8, 8, railBot - railTop + 16, 3); ctx.fill();
+        ctx.fillStyle = '#0c0e12'; ctx.fillRect(x - 0.5, railTop - 2, 1, railBot - railTop + 4); }
+      knee(xLK); knee(xHK);
+      ctx.fillStyle = 'rgba(255,255,255,.5)'; grip(xLF, railBot + 6); grip(xHF, railBot + 6);
+      // intensity grip on plateau top edge
+      var midX = (xLK + xHK) / 2;
+      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(midX, yTop, 4.5, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(214,218,227,.6)'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('⇕ ' + Math.round(state.intensity) + '%', midX, Math.max(10, yTop - 7));
+    }
+    function pick(mx) {
+      var hd = handles(), cand = [['lowKnee', xOf(hd.lowKnee)], ['highKnee', xOf(hd.highKnee)], ['lowFoot', xOf(hd.lowFoot)], ['highFoot', xOf(hd.highFoot)]];
+      var best = null, bd = 14;
+      for (var i = 0; i < cand.length; i++) { var d = Math.abs(mx - cand[i][1]); if (d < bd) { bd = d; best = cand[i][0]; } }
+      return best;
+    }
+    function applyHandle(name, v) {
+      if (name === 'lowKnee') state.threshold = Math.min(v, state.rangeHigh);
+      else if (name === 'highKnee') state.rangeHigh = Math.max(v, state.threshold);
+      else if (name === 'lowFoot') state.thresholdSoftness = Math.max(0, Math.min(100, state.threshold - v));
+      else if (name === 'highFoot') state.rangeHighSoft = Math.max(0, Math.min(100, v - state.rangeHigh));
+    }
+    function evX(e){ var r = cv.getBoundingClientRect(); return e.clientX - r.left; }
+    function evY(e){ var r = cv.getBoundingClientRect(); return (e.clientY - r.top) * (150 / r.height); }
+
+    cv.addEventListener('mousedown', function(e) {
+      var x = evX(e);
+      if (eyedrop) { var v = vOf(x); state.threshold = Math.max(0, v - 22); state.rangeHigh = Math.min(255, v + 22);
+        state.thresholdSoftness = 14; state.rangeHighSoft = 14; eyedrop = false; cv.style.cursor = 'crosshair';
+        draw(); syncSliders(); onCommit(); return; }
+      var h = pick(x);
+      dragging = h || { band: true, start: vOf(x), lo: state.threshold, hi: state.rangeHigh };
+      onMove(e);
+    });
+    function onMove(e) {
+      var v = vOf(evX(e));
+      if (typeof dragging === 'object' && dragging.band) {
+        var d = v - dragging.start, w = dragging.hi - dragging.lo;
+        var lo = dragging.lo + d, hi = dragging.hi + d;
+        if (lo < 0) { lo = 0; hi = w; } if (hi > 255) { hi = 255; lo = 255 - w; }
+        state.threshold = lo; state.rangeHigh = hi;
+        state.intensity = Math.round(intOfY(evY(e)));
+      } else if (dragging) { applyHandle(dragging, v); }
+      draw(); syncSliders();
+    }
+    window.addEventListener('mousemove', function(e) { if (dragging) onMove(e); });
+    window.addEventListener('mouseup', function() { if (dragging) { dragging = null; onCommit(); } });
+
+    return {
+      el: cv, draw: draw, fit: fit,
+      setMode: function(m){ state.rangeMode = m; draw(); },
+      setEyedrop: function(on){ eyedrop = on; cv.style.cursor = on ? 'copy' : 'crosshair'; }
+    };
+  }
 
   function applyPreset(p) {
     // Merge only the keys that exist in the preset object so older presets
@@ -52,9 +201,58 @@ window.GlowUI = (function() {
     if (p.thresholdSoftness !== undefined) { _sliders.thresholdSoftness.setValue(p.thresholdSoftness); }
     if (p.glowOnly          !== undefined) { _glowOnlyToggle.setValue(p.glowOnly); }
     if (p.useController     !== undefined) { _useControllerToggle.setValue(p.useController); }
+    if (p.glowDimensions    !== undefined) { _stretchGroup.setValue(p.glowDimensions); }
+
+    // Native-engine fields (guarded for older presets)
+    if (p.rangeMode     !== undefined && _rangeModeGroup)        { _rangeModeGroup.setValue(p.rangeMode); }
+    if (p.rangeHigh     !== undefined && _sliders.rangeHigh)     { _sliders.rangeHigh.setValue(p.rangeHigh); }
+    if (p.rangeHighSoft !== undefined && _sliders.rangeHighSoft) { _sliders.rangeHighSoft.setValue(p.rangeHighSoft); }
+    if (p.invertRange   !== undefined && _invertToggle)         { _invertToggle.setValue(p.invertRange); }
+    if (p.linearLight   !== undefined && _linearToggle)        { _linearToggle.setValue(p.linearLight); }
+    if (p.tonemap       !== undefined && _tonemapDD)           { _tonemapDD.setValue(p.tonemap); }
+    if (p.highlightComp !== undefined && _sliders.highlightComp){ _sliders.highlightComp.setValue(p.highlightComp); }
+    if (_glowSel) { _glowSel.setMode(_state.rangeMode); _glowSel.draw(); }
   }
 
   function init(container) {
+    // ── Glow Selection (interactive range qualifier) ─────────────────────────
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Glow Selection'));
+    function syncSliders() {
+      if (_sliders.threshold)         _sliders.threshold.setValue(Math.round(_state.threshold));
+      if (_sliders.thresholdSoftness) _sliders.thresholdSoftness.setValue(Math.round(_state.thresholdSoftness));
+      if (_sliders.intensity)         _sliders.intensity.setValue(Math.round(_state.intensity));
+      if (_sliders.rangeHigh)         _sliders.rangeHigh.setValue(Math.round(_state.rangeHigh));
+      if (_sliders.rangeHighSoft)     _sliders.rangeHighSoft.setValue(Math.round(_state.rangeHighSoft));
+    }
+    _glowSel = makeGlowSelection(_state, _applyLive, syncSliders);
+    container.appendChild(_glowSel.el);
+    _rangeModeGroup = new ButtonGroup({
+      tooltip: 'Which channel the glow selection qualifies on — Luminance, Saturation, or Hue',
+      options: [ { value: 1, label: 'Luma' }, { value: 2, label: 'Sat' }, { value: 3, label: 'Hue' } ],
+      value: 1,
+      onChange: function(v) { _state.rangeMode = v; _glowSel.setMode(v); _applyLive(); }
+    });
+    _invertToggle = new Toggle({ label: 'Invert Range', value: false,
+      tooltip: 'Glow everything OUTSIDE the selected band instead of inside it',
+      onChange: function(v) { _state.invertRange = v; _glowSel.draw(); _applyLive(); } });
+    var eyeBtn = Utils.el('button', { class: 'mini-btn' }, 'Pick ⌖');
+    eyeBtn.addEventListener('click', function() {
+      var on = eyeBtn.className.indexOf('on') < 0;
+      eyeBtn.className = 'mini-btn' + (on ? ' on' : '');
+      _glowSel.setEyedrop(on);
+    });
+    container.appendChild(_rangeModeGroup.el);
+    container.appendChild(_invertToggle.el);
+    container.appendChild(eyeBtn);
+    _sliders.rangeHigh = new Slider({ label: 'Range High', min: 0, max: 255, value: 255, step: 1, defaultValue: 255,
+      tooltip: 'Upper edge of the glow band (255 = open top: brightest pixels still glow)',
+      onChange: function(v) { _state.rangeHigh = v; _glowSel.draw(); } });
+    _sliders.rangeHighSoft = new Slider({ label: 'Range High Soft', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Feather above the upper edge of the band',
+      onChange: function(v) { _state.rangeHighSoft = v; _glowSel.draw(); } });
+    container.appendChild(_sliders.rangeHigh.el);
+    container.appendChild(_sliders.rangeHighSoft.el);
+
     // ── Glow ─────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Glow'));
     _sliders.intensity = new Slider({ label: 'Intensity %', min: 0, max: 500, value: 150, step: 1, defaultValue: 150,
@@ -66,9 +264,21 @@ window.GlowUI = (function() {
     _sliders.layers = new Slider({ label: 'Glow Layers', min: 1, max: 5, value: 2, step: 1, defaultValue: 2,
       tooltip: 'Number of stacked glow passes — more layers = richer, more complex glow',
       onChange: function(v) { _state.layers = v; } });
+    _stretchGroup = new ButtonGroup({
+      tooltip: 'Stretch the glow into an anamorphic streak — Both (round bloom), Horizontal, or Vertical',
+      options: [
+        { value: 'both',       label: 'Both' },
+        { value: 'horizontal', label: 'Horiz' },
+        { value: 'vertical',   label: 'Vert' }
+      ],
+      value: 'both',
+      onChange: function(v) { _state.glowDimensions = v; }
+    });
     container.appendChild(_sliders.intensity.el);
     container.appendChild(_sliders.radius.el);
     container.appendChild(_sliders.layers.el);
+    container.appendChild(Utils.el('div', { class: 'sub-label' }, 'Stretch'));
+    container.appendChild(_stretchGroup.el);
 
     // ── Source ────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Source'));
@@ -122,6 +332,23 @@ window.GlowUI = (function() {
     container.appendChild(_sliders.saturation.el);
     container.appendChild(_sliders.hueShift.el);
 
+    // ── Cinematic (native engine) ────────────────────────────────────────────
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Cinematic'));
+    _linearToggle = new Toggle({ label: 'Linear Light', value: true,
+      tooltip: 'Blur in linear light for a physically-correct, never-clipping bloom',
+      onChange: function(v) { _state.linearLight = v; } });
+    _tonemapDD = new Dropdown({ label: 'Tonemap',
+      tooltip: 'Roll highlights off so intense glow never blows out to flat white',
+      options: [ { value: 1, label: 'None' }, { value: 2, label: 'Soft-clip' }, { value: 3, label: 'Filmic' } ],
+      value: 2,
+      onChange: function(v) { _state.tonemap = v; } });
+    _sliders.highlightComp = new Slider({ label: 'Highlight Cmp', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'How hard the tonemap compresses the brightest glow',
+      onChange: function(v) { _state.highlightComp = v; } });
+    container.appendChild(_linearToggle.el);
+    container.appendChild(_tonemapDD.el);
+    container.appendChild(_sliders.highlightComp.el);
+
     // ── Output ────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Output'));
     _blendDD = new Dropdown({
@@ -162,6 +389,15 @@ window.GlowUI = (function() {
 
     _status = Utils.el('div', { class: 'status-bar' }, '');
     container.appendChild(_status);
+
+    // Live update: any native <input>/<select> change (sliders, dropdowns,
+    // color) redraws the band and debounce-applies to the reused effect.
+    container.addEventListener('input',  function() { if (_glowSel) _glowSel.draw(); _applyLive(); });
+    container.addEventListener('change', function() { if (_glowSel) _glowSel.draw(); _applyLive(); });
+
+    // Size the canvas once the panel has laid out, and on resize.
+    setTimeout(function() { if (_glowSel) _glowSel.fit(); }, 40);
+    window.addEventListener('resize', function() { if (_glowSel) _glowSel.fit(); });
   }
 
   function _apply(btn) {

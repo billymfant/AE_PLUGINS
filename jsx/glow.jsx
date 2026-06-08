@@ -1,4 +1,36 @@
+// Deep Glow — drives the NATIVE compiled GPU effect (DeepGlowGPU.aex) from the
+// CEP panel. Earlier versions duplicated layers and stacked AE's built-in
+// 'ADBE Glo2' with expressions/a controller null; that stopgap is replaced now
+// that the real C++/CUDA effect exists. We just apply the effect by match name
+// and push the panel params onto its controls.
 var Glow = (function() {
+
+  var MATCH = 'DKVB DeepGlowGPU';   // == AE_Effect_Match_Name in DeepGlowGPUPiPL.r
+
+  // ── panel-string -> native popup index helpers ──────────────
+  function falloffIdx(s){ return s === 'linear' ? 1 : s === 'exponential' ? 3 : 2; }      // default Soft
+  function blendIdx(s){ return s === 'add' ? 1 : 2; }                                      // native: Add|Screen (default Screen)
+  function dimIdx(s){ return s === 'horizontal' ? 2 : s === 'vertical' ? 3 : 1; }          // Both|Horiz|Vert
+  function num(v, d){ return (typeof v === 'number' && !isNaN(v)) ? v : d; }
+
+  // Reuse an existing Deep Glow on the layer (so re-apply = live update), else add.
+  function _fx(layer) {
+    var parade = layer.property('ADBE Effect Parade');
+    for (var i = 1; i <= parade.numProperties; i++) {
+      var p = parade.property(i);
+      if (p && p.matchName === MATCH) return p;
+    }
+    if (!parade.canAddProperty(MATCH)) {
+      throw new Error('Deep Glow plugin not found. Install DeepGlowGPU.aex into the AE Plug-ins folder and relaunch AE.');
+    }
+    return parade.addProperty(MATCH);
+  }
+
+  // Set a native param by its UI display name; silent if a name is missing so an
+  // older .aex still applies what it can.
+  function _set(fx, name, val) {
+    try { var pr = fx.property(name); if (pr) pr.setValue(val); } catch (e) {}
+  }
 
   function apply(params) {
     return withUndo('Deep Glow', function() {
@@ -8,195 +40,46 @@ var Glow = (function() {
         return { error: 'Select one or more layers to apply Deep Glow.' };
       }
 
-      // ── Resolve params (keep defaults identical to v0 for backward compat) ──
-      var intensity         = (params.intensity         || 150) / 100;
-      var radius            = params.radius             || 60;
-      var threshold         = params.threshold          || 80;
-      var glowColorHex      = params.glowColor          || '#ffffff';
-      var glowColor         = hexToRgb(glowColorHex);
-      var blendMode         = blendModeFromString(params.blendMode || 'screen');
-      var numLayers         = params.layers             || 2;
-      var quality           = params.quality            || 'quality';
-      var satBoost          = params.saturation         || 0;
-      var hueShift          = params.hueShift           || 0;
-      var colorize          = params.colorize           || false;
-      var falloff           = params.falloff            || 'soft';
-
-      // New v0.1 params — safe defaults when not provided (older presets)
-      var tintAmount        = (params.tintAmount        !== undefined) ? params.tintAmount        : 0;
-      var sourceGain        = (params.sourceGain        !== undefined) ? params.sourceGain        : 100;
-      var thresholdSoftness = (params.thresholdSoftness !== undefined) ? params.thresholdSoftness : 20;
-      var glowOnly          = (params.glowOnly          !== undefined) ? params.glowOnly          : false;
-      var useController     = (params.useController     !== undefined) ? params.useController     : true;
+      // glow color -> [r,g,b,a] 0..1
+      var col = hexToRgb(params.glowColor || '#ffffff');
+      if (col.length < 4) col = [col[0], col[1], col[2], 1];
 
       var count = 0;
-
-      // ── Controller creation (one per operation, shared by all selected layers) ──
-      // Fix #4: generate a unique controller name so applying twice doesn't create
-      // two nulls with the same name (thisComp.layer() would resolve ambiguously).
-      var ctrlName = 'GLOW_CONTROLLER';
-      if (useController) {
-        var ctrlSuffix = 2;
-        while (true) {
-          try { comp.layer(ctrlName); ctrlName = 'GLOW_CONTROLLER_' + ctrlSuffix; ctrlSuffix++; }
-          catch (e) { break; }
-        }
-      }
-
-      var controllerLayer = null;
-      if (useController) {
-        controllerLayer = comp.layers.addNull();
-        controllerLayer.name = ctrlName;
-        controllerLayer.moveToBeginning();
-
-        var fx = controllerLayer.property('ADBE Effect Parade');
-
-        // Slider: Glow Intensity
-        var fxIntensity = fx.addProperty('ADBE Slider Control');
-        fxIntensity.name = 'Glow Intensity';
-        fxIntensity.property('ADBE Slider Control-0001').setValue(params.intensity || 150);
-
-        // Slider: Glow Radius
-        var fxRadius = fx.addProperty('ADBE Slider Control');
-        fxRadius.name = 'Glow Radius';
-        fxRadius.property('ADBE Slider Control-0001').setValue(radius);
-
-        // Slider: Threshold
-        var fxThreshold = fx.addProperty('ADBE Slider Control');
-        fxThreshold.name = 'Threshold';
-        fxThreshold.property('ADBE Slider Control-0001').setValue(threshold);
-
-        // Slider: Threshold Softness
-        var fxThresholdSoftness = fx.addProperty('ADBE Slider Control');
-        fxThresholdSoftness.name = 'Threshold Softness';
-        fxThresholdSoftness.property('ADBE Slider Control-0001').setValue(thresholdSoftness);
-
-        // Slider: Source Gain
-        var fxSourceGain = fx.addProperty('ADBE Slider Control');
-        fxSourceGain.name = 'Source Gain';
-        fxSourceGain.property('ADBE Slider Control-0001').setValue(sourceGain);
-
-        // Color Control: Tint Color
-        // (Tint Amount slider removed — Fix #1: no expression reads it from the controller;
-        //  tintAmount is consumed at apply-time only, as the gate for colorize logic below.)
-        var fxTintColor = fx.addProperty('ADBE Color Control');
-        fxTintColor.name = 'Tint Color';
-        fxTintColor.property('ADBE Color Control-0001').setValue(glowColor);
-
-        // Checkbox Control: Glow Only
-        var fxGlowOnly = fx.addProperty('ADBE Checkbox Control');
-        fxGlowOnly.name = 'Glow Only';
-        fxGlowOnly.property('ADBE Checkbox Control-0001').setValue(glowOnly ? 1 : 0);
-      }
-
-      // ── Per-source-layer pass creation ────────────────────────────────────
       for (var li = 0; li < selected.length; li++) {
-        var src = selected[li];
+        var fx = _fx(selected[li]);
 
-        // Apply Glow Only to the source layer.
-        // Fix #3 (data-preservation): only overwrite source opacity when it is
-        // "clean" — no keyframes and no existing expression — so user-authored
-        // opacity animations or expressions are never silently destroyed.
-        var opProp = src.property('ADBE Opacity');
-        if (useController) {
-          // Expression-driven: controller checkbox toggles source visibility
-          if (opProp.numKeys === 0 && (!opProp.expression || opProp.expression === '')) {
-            opProp.expression = 'thisComp.layer("' + ctrlName + '").effect("Glow Only")("Checkbox")==1 ? 0 : 100';
-          }
-        } else {
-          // Baked: static opacity when not using controller — only set if no keyframes
-          if (glowOnly && opProp.numKeys === 0) {
-            opProp.setValue(0);
-          }
-        }
+        _set(fx, 'Intensity %',           num(params.intensity, 150));
+        _set(fx, 'Radius (px)',           num(params.radius, 60));
+        _set(fx, 'Threshold',             num(params.threshold, 80));
+        _set(fx, 'Threshold Softness',    num(params.thresholdSoftness, 20));
 
-        for (var pass = 0; pass < numLayers; pass++) {
-          var passScale        = _glowPassScale(pass, numLayers, falloff);
-          var passRadiusFactor = (1 + pass * 0.8);    // factor baked into expressions
-          var passRadius       = radius * passRadiusFactor;
+        // Glow Selection band
+        _set(fx, 'Range Mode',            num(params.rangeMode, 1));            // 1 Lum 2 Sat 3 Hue
+        _set(fx, 'Range High',            num(params.rangeHigh, 255));
+        _set(fx, 'Range High Softness',   num(params.rangeHighSoft, 0));
+        _set(fx, 'Invert Range',          params.invertRange ? 1 : 0);
 
-          var dup = src.duplicate();
-          dup.name = src.name + '_Glow_' + (pass + 1);
-          dup.moveAfter(src);
+        _set(fx, 'Source Gain %',         num(params.sourceGain, 100));
+        _set(fx, 'Glow Color',            col);
+        _set(fx, 'Colorize',              params.colorize ? 1 : 0);
+        _set(fx, 'Saturation',            num(params.saturation, 0));
+        _set(fx, 'Hue Shift',             num(params.hueShift, 0));
 
-          if (quality === 'fast') {
-            dup.quality = LayerQuality.DRAFT;
-          }
+        _set(fx, 'Passes',                num(params.layers, 2));
+        _set(fx, 'Falloff',               falloffIdx(params.falloff || 'soft'));
+        _set(fx, 'Blend',                 blendIdx(params.blendMode || 'screen'));
+        _set(fx, 'Glow Dimensions',       dimIdx(params.glowDimensions || 'both'));
+        _set(fx, 'Glow Only',             params.glowOnly ? 1 : 0);
 
-          var glowFx = dup.property('ADBE Effect Parade').addProperty('ADBE Glow');
-          if (glowFx) {
-            if (useController) {
-              // ── Expression-driven pass values ──────────────────────────────
+        _set(fx, 'Linear Light',          (params.linearLight === undefined ? true : params.linearLight) ? 1 : 0);
+        _set(fx, 'Tonemap',               num(params.tonemap, 2));              // 1 None 2 Soft 3 Filmic
+        _set(fx, 'Highlight Compression', num(params.highlightComp, 0));
 
-              // Radius: controller base * per-pass factor (factor literal is baked in)
-              glowFx.property('ADBE Glow Radius').expression =
-                'var c=thisComp.layer("' + ctrlName + '"); c.effect("Glow Radius")("Slider") * ' + passRadiusFactor + ';';
-
-              // Intensity: controller intensity * sourceGain * per-pass scale literal
-              glowFx.property('ADBE Glow Intensity').expression =
-                'var c=thisComp.layer("' + ctrlName + '"); ' +
-                '(c.effect("Glow Intensity")("Slider")/100) * (c.effect("Source Gain")("Slider")/100) * ' + passScale + ';';
-
-              // Threshold: soften by Threshold Softness (lowers effective threshold)
-              glowFx.property('ADBE Glow Threshold').expression =
-                'var c=thisComp.layer("' + ctrlName + '"); ' +
-                'var t=c.effect("Threshold")("Slider"); ' +
-                'var s=c.effect("Threshold Softness")("Slider"); ' +
-                'Math.max(0,(t - s))/255;';
-
-              // Tint / colorize: use controller when tintAmount > 0 or colorize is on
-              if (tintAmount > 0 || colorize) {
-                glowFx.property('ADBE Glow Operation').setValue(3);
-                glowFx.property('ADBE Glow Color A').expression =
-                  'thisComp.layer("' + ctrlName + '").effect("Tint Color")("Color");';
-              }
-
-            } else {
-              // ── Baked (non-controller) path — identical to original v0 ──
-              glowFx.property('ADBE Glow Threshold').setValue(threshold / 255);
-              glowFx.property('ADBE Glow Radius').setValue(passRadius);
-              glowFx.property('ADBE Glow Intensity').setValue(intensity * passScale);
-              if (colorize) {
-                glowFx.property('ADBE Glow Operation').setValue(3);
-                glowFx.property('ADBE Glow Color A').setValue(glowColor);
-              }
-            }
-          }
-
-          // Hue/Sat — same for both paths (baked on the dup layer)
-          if (satBoost !== 0 || hueShift !== 0) {
-            var hueFx = dup.property('ADBE Effect Parade').addProperty('ADBE HUE SATURATION');
-            if (hueFx) {
-              if (hueShift !== 0) { hueFx.property('ADBE HUE SATURATION-0001').setValue(hueShift); }
-              if (satBoost !== 0) { hueFx.property('ADBE HUE SATURATION-0002').setValue(satBoost); }
-            }
-          }
-
-          dup.blendingMode = blendMode;
-
-          // Fix #2: pass-layer opacity is a baked constant in both paths; the old
-          // expression referenced 'c' but never used it, making it a fragile static.
-          // Use setValue uniformly — no expression needed here.
-          dup.property('ADBE Opacity').setValue(100 * passScale);
-        }
         count++;
       }
 
       return { success: true, count: count };
     });
-  }
-
-  // Intensity multiplier per pass index based on falloff curve.
-  // pass=0 always returns 1.0 (full intensity first pass).
-  function _glowPassScale(pass, numLayers, falloff) {
-    if (falloff === 'linear') {
-      return Math.max(0.05, 1 - (pass / Math.max(1, numLayers - 1)) * 0.9);
-    }
-    if (falloff === 'exponential') {
-      return Math.pow(0.45, pass);
-    }
-    // 'soft' default — inverse square root decay
-    return 1 / Math.sqrt(pass + 1);
   }
 
   return { apply: apply };
