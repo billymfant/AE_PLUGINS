@@ -35,8 +35,15 @@ enum {
     DG_INPUT = 0,          /* the layer the effect is applied to        */
     DG_INTENSITY,          /* float %   0..1000   (default 150)         */
     DG_RADIUS,             /* float px  0..500    (default 60)          */
-    DG_THRESHOLD,          /* float     0..255    (default 80)          */
-    DG_THRESHOLD_SOFT,     /* float     0..100    (default 20)          */
+    DG_THRESHOLD,          /* float     0..255    (default 80) low edge  */
+    DG_THRESHOLD_SOFT,     /* float     0..100    (default 20) low feather*/
+
+    /* --- glow selection band (interactive range qualifier) -------- */
+    DG_RANGE_MODE,         /* popup  Luminance/Saturation/Hue (default 1)*/
+    DG_RANGE_HIGH,         /* float     0..255    (default 255 = open)   */
+    DG_RANGE_HIGH_SOFT,    /* float     0..100    (default 0) high feather*/
+    DG_INVERT_RANGE,       /* checkbox            (default off)          */
+
     DG_SOURCE_GAIN,        /* float %   0..400    (default 100)         */
     DG_GLOW_COLOR,         /* color               (default white)       */
     DG_COLORIZE,           /* checkbox            (default off)         */
@@ -61,6 +68,7 @@ enum {
 #define DG_BLEND_OP_CHOICES    "Add|Screen"
 #define DG_DIMENSIONS_CHOICES  "Both|Horizontal|Vertical"
 #define DG_TONEMAP_CHOICES     "None|Soft-clip|Filmic"
+#define DG_RANGE_MODE_CHOICES  "Luminance|Saturation|Hue"
 
 /* Falloff enum (1-based to match AE popup values) */
 enum { DG_FALLOFF_LINEAR = 1, DG_FALLOFF_SOFT, DG_FALLOFF_EXP };

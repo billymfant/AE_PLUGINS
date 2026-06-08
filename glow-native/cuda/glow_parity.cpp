@@ -133,6 +133,26 @@ int main(){
         fails += runSrc("OFFSET_CANVAS", canvas, p, 1e-3f);
     }
 
+    // (e) RANGE_BAND + HUE — exercises the new selection band (saturation mode,
+    //     bounded high edge, feathered) AND the hue-rotation, on GPU vs CPU.
+    {
+        Params p;
+        p.linearLight=false; p.tonemap=TONE_NONE;
+        p.rangeMode=RANGE_SATURATION; p.threshold=0.20f; p.thresholdSoft=0.10f;
+        p.rangeHigh=0.80f; p.rangeSoftHigh=0.10f; p.invertRange=false;
+        p.radius=60.f; p.hueShift=1.0f; p.saturation=0.2f;
+        p.glowR=0.9f; p.glowG=0.6f; p.glowB=0.3f;
+        fails += runConfig("RANGE_SAT_HUE", p, W, H, 1e-3f);
+    }
+    // (f) RANGE_INVERT on luminance — the invert path + a bounded midtone band.
+    {
+        Params p;
+        p.linearLight=false; p.tonemap=TONE_NONE;
+        p.rangeMode=RANGE_LUMINANCE; p.threshold=0.30f; p.thresholdSoft=0.10f;
+        p.rangeHigh=0.70f; p.rangeSoftHigh=0.10f; p.invertRange=true; p.radius=50.f;
+        fails += runConfig("RANGE_INVERT", p, W, H, 1e-3f);
+    }
+
     if (fails){ printf("\n%d config(s) FAILED parity\n", fails); return 1; }
     printf("\nALL PARITY CONFIGS PASSED\n");
     return 0;

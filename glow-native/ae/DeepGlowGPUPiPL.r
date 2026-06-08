@@ -48,11 +48,11 @@ resource 'PiPL' (16000) {
 			0
 		},
 		/* [10] */
-		/* 0x02000600 = PIX_INDEPENDENT(1<<10=0x400) | DEEP_COLOR_AWARE(1<<25=0x2000000)
-		   | I_EXPAND_BUFFER(1<<9=0x200)
+		/* 0x02000400 = PIX_INDEPENDENT(1<<10=0x400) | DEEP_COLOR_AWARE(1<<25=0x2000000).
+		   I_EXPAND_BUFFER(0x200) is OFF for v1 (render 1:1, no offset).
 		   MUST match GlobalSetup()'s out_flags or AE refuses the effect. */
 		AE_Effect_Global_OutFlags {
-			0x2000600
+			0x2000400
 		},
 		/* 0x0A001400 = SMART_RENDER(1<<10=0x400) | FLOAT_COLOR_AWARE(1<<12=0x1000)
 		   | SUPPORTS_GPU_RENDER_F32(1<<25=0x2000000)

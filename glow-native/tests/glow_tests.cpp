@@ -145,6 +145,44 @@ static void test_anamorphic_horizontal_wider(){
     CHECK(horiz > vert);                       // streaks horizontally
 }
 
+static void test_range_band_selects_midtones(){
+    // Glow Selection band [0.40, 0.60] on luminance: only MIDTONES qualify.
+    // Shadows below and highlights above the band are excluded -> this is the
+    // interactive "what range glows" feature the reference image describes.
+    Image src = lumaRamp(64,64);                 // column x -> luma x/63
+    Params p; p.rangeMode=RANGE_LUMINANCE; p.threshold=0.40f; p.thresholdSoft=0.0f;
+    p.rangeHigh=0.60f; p.rangeSoftHigh=0.0f; p.sourceGain=1.f;
+    Image e = extractBright(src, p);
+    CHECK(e.at(31,32)[3] > 0.5f);                // luma ~0.49 inside the band
+    CHECK(e.at(6 ,32)[3] < 0.01f);               // luma ~0.10 below the band
+    CHECK(e.at(57,32)[3] < 0.01f);               // luma ~0.90 above the band
+}
+static void test_range_invert_flips(){
+    // Invert Range selects OUTSIDE the band: midtones drop out, shadows +
+    // highlights come back in.
+    Image src = lumaRamp(64,64);
+    Params p; p.rangeMode=RANGE_LUMINANCE; p.threshold=0.40f; p.thresholdSoft=0.0f;
+    p.rangeHigh=0.60f; p.rangeSoftHigh=0.0f; p.invertRange=true;
+    Image e = extractBright(src, p);
+    CHECK(e.at(31,32)[3] < 0.5f);                // midtone now EXCLUDED
+    CHECK(e.at(6 ,32)[3] > 0.99f);               // shadow now INCLUDED
+    CHECK(e.at(57,32)[3] > 0.99f);               // highlight now INCLUDED
+}
+static void test_range_default_is_legacy_highpass(){
+    // Defaults (rangeHigh>=1, luminance) must reproduce the old high-pass so
+    // existing looks are unchanged: high threshold extracts less than low.
+    Image src = lumaRamp(64,64);
+    Params lo; lo.threshold=0.10f; lo.thresholdSoft=0.0f; lo.sourceGain=1.f;
+    Params hi = lo; hi.threshold=0.90f;
+    CHECK(energy(extractBright(src,lo)) > energy(extractBright(src,hi)));
+}
+static void test_hue_shift_rotates_color(){
+    // Luma-preserving hue rotation: red rotated +120deg lands in the green family.
+    float r=1.f,g=0.f,b=0.f;
+    hueRotate(r,g,b, 2.09439510f);               // +120 degrees
+    CHECK(g > r && g > b);
+}
+
 int main() {
     test_luma();
     test_bilinear_center();
@@ -156,6 +194,10 @@ int main() {
     test_glow_alpha_over_transparent();
     test_tonemap_compresses_highlights();
     test_anamorphic_horizontal_wider();
+    test_range_band_selects_midtones();
+    test_range_invert_flips();
+    test_range_default_is_legacy_highpass();
+    test_hue_shift_rotates_color();
     if (g_fail) { printf("%d CHECK(s) failed\n", g_fail); return 1; }
     printf("ALL TESTS PASSED\n"); return 0;
 }

@@ -96,9 +96,13 @@ GlobalSetup(PF_InData* in_data, PF_OutData* out_data,
                                       DG_BUG_VERSION, DG_STAGE_VERSION,
                                       DG_BUILD_VERSION);
 
+    // NOTE: buffer expansion (PF_OutFlag_I_EXPAND_BUFFER) is intentionally OFF
+    // for v1. It grows the layer bounds so the glow can spill past the layer
+    // edge, but the output_origin remap was shifting the footage in-host. We
+    // render strictly 1:1 (input == output == requested rect) — no offset, the
+    // glow clips at the frame edge. "Extend edges" returns later as a toggle.
     out_data->out_flags  = PF_OutFlag_PIX_INDEPENDENT |
-                           PF_OutFlag_DEEP_COLOR_AWARE |
-                           PF_OutFlag_I_EXPAND_BUFFER;
+                           PF_OutFlag_DEEP_COLOR_AWARE;
 
     out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
                            PF_OutFlag2_FLOAT_COLOR_AWARE |
@@ -169,6 +173,21 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data,
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Threshold Softness", 0, 100, 0, 100, 20,
                          PF_Precision_INTEGER, 0, 0, DG_THRESHOLD_SOFT);
+
+    /* --- glow selection band (interactive range qualifier) ---------- */
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_POPUP("Range Mode", 3, glow::RANGE_LUMINANCE, DG_RANGE_MODE_CHOICES, DG_RANGE_MODE);
+
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Range High", 0, 255, 0, 255, 255,
+                         PF_Precision_INTEGER, 0, 0, DG_RANGE_HIGH);
+
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Range High Softness", 0, 100, 0, 100, 0,
+                         PF_Precision_INTEGER, 0, 0, DG_RANGE_HIGH_SOFT);
+
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_CHECKBOX("Invert Range", "", FALSE, 0, DG_INVERT_RANGE);
 
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Source Gain %", 0, 400, 0, 400, 100,
@@ -245,6 +264,15 @@ ReadParams(PF_ParamDef* params[])
     p.radius        = (float)(params[DG_RADIUS]->u.fs_d.value);
     p.threshold     = (float)(params[DG_THRESHOLD]->u.fs_d.value / 255.0);
     p.thresholdSoft = (float)(params[DG_THRESHOLD_SOFT]->u.fs_d.value / 100.0);
+
+    // Glow selection band. Range High of 255 (UI max -> 1.0) means "open top":
+    // rangeMask treats >=1 as unbounded, so the default reproduces the legacy
+    // high-pass and HDR/superbright pixels keep glowing.
+    p.rangeMode     = (int)params[DG_RANGE_MODE]->u.pd.value;     // RANGE_* == glow::RANGE_*
+    p.rangeHigh     = (float)(params[DG_RANGE_HIGH]->u.fs_d.value / 255.0);
+    p.rangeSoftHigh = (float)(params[DG_RANGE_HIGH_SOFT]->u.fs_d.value / 100.0);
+    p.invertRange   = params[DG_INVERT_RANGE]->u.bd.value != 0;
+
     p.sourceGain    = (float)(params[DG_SOURCE_GAIN]->u.fs_d.value / 100.0);
 
     const PF_Pixel glowC = params[DG_GLOW_COLOR]->u.cd.value;   // A/R/G/B 0..255
@@ -254,7 +282,7 @@ ReadParams(PF_ParamDef* params[])
 
     p.colorize      = params[DG_COLORIZE]->u.bd.value != 0;
     p.saturation    = (float)(params[DG_SATURATION]->u.fs_d.value / 100.0);
-    p.hueShift      = (float)(params[DG_HUE_SHIFT]->u.fs_d.value * (3.14159265358979323846 / 180.0)); // radians (currently a no-op in core)
+    p.hueShift      = (float)(params[DG_HUE_SHIFT]->u.fs_d.value * (3.14159265358979323846 / 180.0)); // radians; rotates glow hue (core + CUDA)
 
     // Passes: READ but UNWIRED (see header note above). levels=0 -> auto from radius.
     (void)params[DG_PASSES]->u.sd.value;
@@ -419,28 +447,15 @@ ImageToWorld(const glow::Image& img, PF_EffectWorld* w, PF_PixelFormat fmt)
 
 
 /* ================================================================== *
- *  SMART_PRE_RENDER — checkout input, declare expanded output region.
+ *  SMART_PRE_RENDER — checkout input, declare output region.
  *
- *  With PF_OutFlag_I_EXPAND_BUFFER set (GlobalSetup + PiPL), the effect
- *  may report an output region LARGER than the input layer so the glow can
- *  spread past the layer's own bounds. We:
- *    1. compute `margin` = ceil(radius) (+ a couple px slack) — the glow's
- *       spatial reach (the mip pyramid spreads ~radius px).
- *    2. outset the INPUT checkout request by `margin` so we gather any
- *       source that bleeds in from neighbours.
- *    3. report result_rect / max_result_rect = the OUTPUT request OUTSET by
- *       `margin` (the region the glow fills). WITHOUT I_EXPAND_BUFFER this
- *       outset re-triggers AE error 25::237; WITH the flag it is allowed.
- *       AE clamps the reported rect to comp bounds as needed — expected.
+ *  v1 renders strictly 1:1 (no buffer expansion): the input is checked out
+ *  at exactly the requested rect and the output region equals that request,
+ *  so the input and output worlds share the same origin/size and the render
+ *  needs no offset remap. The glow clips at the frame edge. (The "extend
+ *  edges" mode — I_EXPAND_BUFFER + an output_origin remap — is deferred until
+ *  the in-host coordinates are verified; it was offsetting the footage.)
  * ================================================================== */
-static void OutsetRect(PF_LRect* r, A_long m)
-{
-    r->left   -= m;
-    r->top    -= m;
-    r->right  += m;
-    r->bottom += m;
-}
-
 static PF_Err
 PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
 {
@@ -452,25 +467,9 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
     // still call the CPU SmartRender when GPU is unavailable/disabled.
     extraP->output->flags |= PF_RenderOutputFlag_GPU_RENDER_POSSIBLE;
 
-    // Glow reach = radius (in px). Read DG_RADIUS directly (float slider).
-    PF_ParamDef radius_param;
-    AEFX_CLR_STRUCT(radius_param);
-    A_long margin = 0;
-    if (PF_CHECKOUT_PARAM(in_data, DG_RADIUS,
-                          in_data->current_time, in_data->time_step,
-                          in_data->time_scale, &radius_param) == PF_Err_NONE) {
-        double radius = radius_param.u.fs_d.value;
-        if (radius > 0.0) {
-            margin = (A_long)ceil(radius) + 2;   // +2px slack for tent/bilinear reach
-        }
-        PF_CHECKIN_PARAM(in_data, &radius_param);
-    }
-
-    // 1+2. Outset the input checkout request by the glow reach so we gather
-    //      source that bleeds in from beyond the requested region.
-    OutsetRect(&req.rect, margin);
+    // Check out the input at the requested rect (no outset -> input and output
+    // worlds stay aligned and same-sized; output_origin is 0 at render time).
     req.preserve_rgb_of_zero_alpha = FALSE;
-
     ERR(extraP->cb->checkout_layer(in_data->effect_ref,
                                    DG_INPUT,
                                    DG_INPUT,
@@ -481,19 +480,9 @@ PreRender(PF_InData* in_data, PF_OutData* out_data, PF_PreRenderExtra* extraP)
                                    &in_result));
 
     if (!err) {
-        // 3. Report the EXPANDED output region: the original output request
-        //    outset by the glow reach. This is the region the glow fills and
-        //    is allowed to exceed the input thanks to I_EXPAND_BUFFER.
-        PF_LRect out_rect = extraP->input->output_request.rect;
-        OutsetRect(&out_rect, margin);
-
-        extraP->output->result_rect     = out_rect;
-        extraP->output->max_result_rect = out_rect;
-
-        // Also union in whatever the input actually returned, so we never
-        // report less than the available source (belt-and-suspenders).
-        UnionLRect(&in_result.result_rect,     &extraP->output->result_rect);
-        UnionLRect(&in_result.max_result_rect, &extraP->output->max_result_rect);
+        // Output region == the request. result_rect must not exceed it.
+        extraP->output->result_rect     = extraP->input->output_request.rect;
+        extraP->output->max_result_rect = extraP->input->output_request.rect;
     }
     return err;
 }

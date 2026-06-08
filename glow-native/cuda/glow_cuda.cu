@@ -86,16 +86,17 @@ __global__ void k_srgb_to_lin(float* px, int w, int h){
     px[i+2] = d_srgb_to_lin(px[i+2]);
 }
 
-/* extractBright: luma, smoothstep knee (hard compare if lo>=hi), *sourceGain. */
+/* extractBright: trapezoidal selection band on the chosen Range Mode channel,
+   feathered both feet, optional invert, *sourceGain. Mirrors core exactly via
+   the shared glow::selValue / glow::rangeMask helpers (AC4 parity). */
 __global__ void k_extractBright(const float* src, float* dst, int w, int h, Params p){
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     if (x>=w || y>=h) return;
     size_t i = (size_t(y)*w + x)*4;
-    float lo = p.threshold - p.thresholdSoft;
-    float hi = p.threshold;
-    float l = d_luma(src[i], src[i+1], src[i+2]);
-    float m = (lo >= hi) ? (l >= hi ? 1.f : 0.f) : d_smoothstep(lo, hi, l);
+    float v = glow::selValue(src[i], src[i+1], src[i+2], p.rangeMode);
+    float m = glow::rangeMask(v, p.threshold, p.thresholdSoft,
+                              p.rangeHigh, p.rangeSoftHigh, p.invertRange);
     dst[i  ] = src[i  ]*m*p.sourceGain;
     dst[i+1] = src[i+1]*m*p.sourceGain;
     dst[i+2] = src[i+2]*m*p.sourceGain;
@@ -157,6 +158,7 @@ __global__ void k_upsampleAdd(const float* low, int lw, int lh,
 __device__ __forceinline__ void d_applyTint(float& r,float& g,float& b,const Params& p){
     if (p.colorize){ float l=d_luma(r,g,b); r=l*p.glowR; g=l*p.glowG; b=l*p.glowB; }
     else           { r*=p.glowR; g*=p.glowG; b*=p.glowB; }
+    if (p.hueShift!=0.f) glow::hueRotate(r,g,b,p.hueShift);
     if (p.saturation!=0.f){ float l=d_luma(r,g,b);
         r=l+(r-l)*(1.f+p.saturation); g=l+(g-l)*(1.f+p.saturation); b=l+(b-l)*(1.f+p.saturation); }
 }

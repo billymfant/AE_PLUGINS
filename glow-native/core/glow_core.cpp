@@ -34,12 +34,15 @@ static inline float smoothstep(float e0, float e1, float x){
 
 Image extractBright(const Image& src, const Params& p) {
     Image out(src.w, src.h);
-    float lo = p.threshold - p.thresholdSoft;   // knee start
-    float hi = p.threshold;                      // full pass at/above
+    // The selection is a trapezoidal band on the chosen channel (luminance /
+    // saturation / hue), feathered on both feet and optionally inverted. With
+    // the defaults (rangeMode=luminance, rangeHigh>=1) this reduces exactly to
+    // the old "luma >= threshold" high-pass, so existing looks are unchanged.
     for (int y=0;y<src.h;++y) for (int x=0;x<src.w;++x){
         const float* s = src.at(x,y);
-        float l = luma(s[0],s[1],s[2]);
-        float m = (lo >= hi) ? (l >= hi ? 1.f : 0.f) : smoothstep(lo, hi, l);
+        float v = selValue(s[0], s[1], s[2], p.rangeMode);
+        float m = rangeMask(v, p.threshold, p.thresholdSoft,
+                            p.rangeHigh, p.rangeSoftHigh, p.invertRange);
         float* o = out.at(x,y);
         o[0]=s[0]*m*p.sourceGain; o[1]=s[1]*m*p.sourceGain; o[2]=s[2]*m*p.sourceGain; o[3]=m;
     }
@@ -98,6 +101,7 @@ static inline float clampf(float v,float lo,float hi){ return v<lo?lo:(v>hi?hi:v
 static void applyTint(float& r,float& g,float& b,const Params& p){
     if (p.colorize){ float l=luma(r,g,b); r=l*p.glowR; g=l*p.glowG; b=l*p.glowB; }
     else           { r*=p.glowR; g*=p.glowG; b*=p.glowB; }
+    if (p.hueShift!=0.f) hueRotate(r,g,b,p.hueShift);
     if (p.saturation!=0.f){ float l=luma(r,g,b);
         r=l+(r-l)*(1.f+p.saturation); g=l+(g-l)*(1.f+p.saturation); b=l+(b-l)*(1.f+p.saturation); }
 }
