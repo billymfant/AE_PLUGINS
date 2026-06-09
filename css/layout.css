@@ -63,18 +63,10 @@
 }
 .tab-btn.active svg { opacity: 1; }
 
-/* Plugin accent color per tab */
-.tab-btn[data-tab="slides"]    { --tab-color: var(--slides-color); }
-.tab-btn[data-tab="grids"]     { --tab-color: var(--grids-color); }
-.tab-btn[data-tab="glow"]      { --tab-color: var(--glow-color); }
-.tab-btn[data-tab="sorter"]    { --tab-color: var(--sorter-color); }
+/* Plugin accent color per tab (3 hero tools) */
 .tab-btn[data-tab="dist"]      { --tab-color: var(--dist-color); }
 .tab-btn[data-tab="colorlab"]  { --tab-color: var(--colorlab-color); }
-.tab-btn[data-tab="gradient"]  { --tab-color: var(--gradient-color); }
-.tab-btn[data-tab="patterns"]  { --tab-color: var(--patterns-color); }
-.tab-btn[data-tab="physics"]   { --tab-color: var(--physics-color); }
-.tab-btn[data-tab="particles"] { --tab-color: var(--particles-color); }
-.tab-btn[data-tab="glitchmosh"] { --tab-color: var(--glitchmosh-color); }
+.tab-btn[data-tab="glow"]      { --tab-color: var(--glow-color); }
 
 /* ── Plugin name bar ──────────────────────────────────────── */
 .plugin-bar {
@@ -288,21 +280,13 @@
 .status-bar.error   { color: var(--danger); }
 .status-bar.warning { color: var(--warning); }
 
-/* ── Per-pane tab color ─────────────────────────────────────── */
-#pane-slides    { --tab-color: var(--slides-color); }
-#pane-grids     { --tab-color: var(--grids-color); }
-#pane-glow      { --tab-color: var(--glow-color);
-                  --tab-soft: rgba(240,168,58,0.18); --tab-glow: rgba(240,168,58,0.32); }
-#pane-sorter    { --tab-color: var(--sorter-color); }
+/* ── Per-pane tab color (3 hero tools) ──────────────────────── */
 #pane-dist      { --tab-color: var(--dist-color);
                   --tab-soft: rgba(34,184,207,0.18); --tab-glow: rgba(34,184,207,0.32); }
 #pane-colorlab  { --tab-color: var(--colorlab-color);
                   --tab-soft: rgba(224,85,154,0.18); --tab-glow: rgba(224,85,154,0.32); }
-#pane-gradient  { --tab-color: var(--gradient-color); }
-#pane-patterns  { --tab-color: var(--patterns-color); }
-#pane-physics   { --tab-color: var(--physics-color); }
-#pane-particles { --tab-color: var(--particles-color); }
-#pane-glitchmosh { --tab-color: var(--glitchmosh-color); }
+#pane-glow      { --tab-color: var(--glow-color);
+                  --tab-soft: rgba(240,168,58,0.18); --tab-glow: rgba(240,168,58,0.32); }
 
 /* ── Grid helpers ───────────────────────────────────────────── */
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }

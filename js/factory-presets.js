@@ -2,77 +2,6 @@
 
 window.FactoryPresets = {
 
-  slides: {
-    '3×3 Grid': {
-      rows: 3, cols: 3, slideW: 200, slideH: 150,
-      gapH: 12, gapV: 12, randomize: 0,
-      rotationRandom: 0, scaleRandom: 0,
-      animType: 'none', animStagger: 5, useText: false
-    },
-    'Card Deck': {
-      rows: 1, cols: 5, slideW: 180, slideH: 260,
-      gapH: 16, gapV: 10, randomize: 0,
-      rotationRandom: 0, scaleRandom: 0,
-      animType: 'slideUp', animStagger: 8, useText: false
-    },
-    'Scattered': {
-      rows: 4, cols: 4, slideW: 140, slideH: 110,
-      gapH: 24, gapV: 24, randomize: 65,
-      rotationRandom: 14, scaleRandom: 18,
-      animType: 'fade', animStagger: 3, useText: false
-    },
-    'Mosaic': {
-      rows: 6, cols: 6, slideW: 72, slideH: 72,
-      gapH: 4, gapV: 4, randomize: 0,
-      rotationRandom: 0, scaleRandom: 0,
-      animType: 'scale', animStagger: 2, useText: false
-    },
-    'Stagger Reveal': {
-      rows: 2, cols: 4, slideW: 220, slideH: 160,
-      gapH: 14, gapV: 14, randomize: 8,
-      rotationRandom: 3, scaleRandom: 6,
-      animType: 'fade', animStagger: 7, useText: true
-    }
-  },
-
-  grids: {
-    'Blueprint': {
-      gridType: 'rect', width: 500, height: 500,
-      cellSize: 40, lineWidth: 1,
-      lineColor: '#4d9fff', fillColor: '#000a1a',
-      fillOpacity: 25, rotation: 0,
-      animType: 'none', animStagger: 3
-    },
-    'Graph Paper': {
-      gridType: 'rect', width: 500, height: 500,
-      cellSize: 20, lineWidth: 0.5,
-      lineColor: '#cccccc', fillColor: '#ffffff',
-      fillOpacity: 0, rotation: 0,
-      animType: 'none', animStagger: 3
-    },
-    'Hex Mesh': {
-      gridType: 'hex', width: 500, height: 500,
-      cellSize: 35, lineWidth: 1.5,
-      lineColor: '#6ff7c7', fillColor: '#0a2a1f',
-      fillOpacity: 30, rotation: 0,
-      animType: 'stroke', animStagger: 3
-    },
-    'Radar': {
-      gridType: 'radial', width: 500, height: 500,
-      cellSize: 40, lineWidth: 1,
-      lineColor: '#f76f7c', fillColor: '#000000',
-      fillOpacity: 0, rotation: 0,
-      animType: 'fade', animStagger: 3
-    },
-    'Golden Triangles': {
-      gridType: 'tri', width: 500, height: 500,
-      cellSize: 55, lineWidth: 1,
-      lineColor: '#f7c76f', fillColor: '#1a1400',
-      fillOpacity: 20, rotation: 30,
-      animType: 'none', animStagger: 3
-    }
-  },
-
   glow: {
     'Soft Bloom': {
       intensity: 120, radius: 80, falloff: 'soft',
@@ -103,81 +32,6 @@ window.FactoryPresets = {
       threshold: 20, glowColor: '#ffd7b5',
       colorize: true, saturation: -10, hueShift: 0,
       blendMode: 'screen', layers: 2, quality: 'quality'
-    }
-  },
-
-  sorter: {
-    'Classic Bright Sort': {
-      targetMode: 'selectedLayers', applyMode: 'quick',
-      sortMode: 'brightness', direction: 'horizontal',
-      sortLength: 300, thresholdLow: 55, thresholdHigh: 100, thresholdSoftness: 8,
-      randomness: 10, iterations: 1,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: false, animStyle: 'drift', animSpeed: 1, animAmount: 50, loopDuration: 2,
-      angle: 0
-    },
-    'Dark Area Melt': {
-      targetMode: 'adjustmentLayer', applyMode: 'quick',
-      sortMode: 'brightness', direction: 'vertical',
-      sortLength: 420, thresholdLow: 10, thresholdHigh: 50, thresholdSoftness: 12,
-      randomness: 25, iterations: 1,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: true, animStyle: 'drift', animSpeed: 0.6, animAmount: 80, loopDuration: 4,
-      angle: 0
-    },
-    'Vertical Data Fall': {
-      targetMode: 'adjustmentLayer', applyMode: 'quick',
-      sortMode: 'brightness', direction: 'vertical',
-      sortLength: 450, thresholdLow: 55, thresholdHigh: 100, thresholdSoftness: 8,
-      randomness: 20, iterations: 2,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: true, animStyle: 'lengthWave', animSpeed: 0.8, animAmount: 120, loopDuration: 3,
-      angle: 0
-    },
-    'Horizontal Scan Smear': {
-      targetMode: 'selectedLayers', applyMode: 'quick',
-      sortMode: 'brightness', direction: 'horizontal',
-      sortLength: 550, thresholdLow: 40, thresholdHigh: 90, thresholdSoftness: 15,
-      randomness: 5, iterations: 1,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: true, animStyle: 'scanlineMove', animSpeed: 1.2, animAmount: 100, loopDuration: 2,
-      angle: 0
-    },
-    'Red Channel Break': {
-      targetMode: 'duplicateLayer', applyMode: 'quick',
-      sortMode: 'red', direction: 'horizontal',
-      sortLength: 400, thresholdLow: 45, thresholdHigh: 100, thresholdSoftness: 5,
-      randomness: 20, iterations: 1,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: false, animStyle: 'drift', animSpeed: 1, animAmount: 50, loopDuration: 2,
-      angle: 0
-    },
-    'Cyberpunk Hue Sort': {
-      targetMode: 'adjustmentLayer', applyMode: 'rig',
-      sortMode: 'hue', direction: 'horizontal',
-      sortLength: 250, thresholdLow: 30, thresholdHigh: 85, thresholdSoftness: 20,
-      randomness: 35, iterations: 1,
-      useColorKey: false, keyColor: '#ff00ff', keyHueTol: 45,
-      animate: true, animStyle: 'pulse', animSpeed: 1.5, animAmount: 90, loopDuration: 2,
-      angle: 0
-    },
-    'VHS Signal Tear': {
-      targetMode: 'selectedLayers', applyMode: 'quick',
-      sortMode: 'saturation', direction: 'horizontal',
-      sortLength: 600, thresholdLow: 20, thresholdHigh: 75, thresholdSoftness: 18,
-      randomness: 60, iterations: 2,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: true, animStyle: 'randomFlicker', animSpeed: 8, animAmount: 200, loopDuration: 1,
-      angle: 0
-    },
-    'Datamosh Lines': {
-      targetMode: 'adjustmentLayer', applyMode: 'rig',
-      sortMode: 'edges', direction: 'angle',
-      sortLength: 350, thresholdLow: 50, thresholdHigh: 95, thresholdSoftness: 5,
-      randomness: 15, iterations: 1,
-      useColorKey: false, keyColor: '#ff0000', keyHueTol: 30,
-      animate: true, animStyle: 'thresholdSweep', animSpeed: 0.5, animAmount: 60, loopDuration: 5,
-      angle: 15
     }
   },
 
@@ -232,47 +86,6 @@ window.FactoryPresets = {
     'Studio Portrait': { exposure: 0.1, contrast: 5, contrastPivot: 0.18, temperature: 15, tint: -5, saturation: 5, liftX: 0, liftY: 0, liftLuma: 0, gammaX: 0.1, gammaY: 0, gammaLuma: 2, gainX: 0, gainY: 0, gainLuma: 5, linearLight: true, tonemap: 2, highlightComp: 50 },
     'Cross Process': { exposure: 0, contrast: 30, contrastPivot: 0.18, temperature: 0, tint: 0, saturation: 30, liftX: -0.3, liftY: -0.6, liftLuma: -5, gammaX: 0, gammaY: 0, gammaLuma: 0, gainX: 0.87, gainY: 0.3, gainLuma: 0, linearLight: true, tonemap: 2, highlightComp: 50 },
     'Clean Grade': { exposure: 0, contrast: 10, contrastPivot: 0.18, temperature: 0, tint: 0, saturation: 5, liftX: 0, liftY: 0, liftLuma: 0, gammaX: 0, gammaY: 0, gammaLuma: 0, gainX: 0, gainY: 0, gainLuma: 0, linearLight: true, tonemap: 2, highlightComp: 50 }
-  },
-
-  gradient: {
-    'Midnight Radial': { gradientType:'radial', colorStart:'#0a0a2e', colorEnd:'#ff6b6b', startX:50, startY:50, endX:90, endY:90, scatter:15, centerX:50, centerY:50, segments:16, meshBlur:200, meshStops:[{x:20,y:20,color:'#7c3aed'},{x:80,y:20,color:'#2563eb'},{x:50,y:80,color:'#06b6d4'}], noiseType:'basic', noiseScale:250, noiseComplexity:3, colorize:true, blendMode:'normal' },
-    'Horizon Linear': { gradientType:'linear', colorStart:'#ff512f', colorEnd:'#dd2476', startX:0, startY:50, endX:100, endY:50, scatter:10, centerX:50, centerY:50, segments:16, meshBlur:200, meshStops:[{x:20,y:20,color:'#ff512f'},{x:80,y:20,color:'#dd2476'},{x:50,y:80,color:'#f09819'}], noiseType:'basic', noiseScale:250, noiseComplexity:3, colorize:true, blendMode:'normal' },
-    'Aurora Mesh': { gradientType:'mesh', colorStart:'#00c6ff', colorEnd:'#0072ff', startX:10, startY:50, endX:90, endY:50, scatter:0, centerX:50, centerY:50, segments:16, meshBlur:280, meshStops:[{x:15,y:25,color:'#7c3aed'},{x:85,y:25,color:'#0ea5e9'},{x:50,y:75,color:'#10b981'}], noiseType:'basic', noiseScale:250, noiseComplexity:3, colorize:true, blendMode:'normal' },
-    'Lava Conic': { gradientType:'conical', colorStart:'#ff4500', colorEnd:'#ff8c00', startX:10, startY:50, endX:90, endY:50, scatter:0, centerX:50, centerY:50, segments:24, meshBlur:200, meshStops:[{x:50,y:20,color:'#ff4500'},{x:80,y:80,color:'#ff8c00'},{x:20,y:80,color:'#ffd700'}], noiseType:'basic', noiseScale:250, noiseComplexity:3, colorize:true, blendMode:'normal' },
-    'Smoke Noise': { gradientType:'noise', colorStart:'#1a1a2e', colorEnd:'#e0e0e0', startX:10, startY:50, endX:90, endY:50, scatter:0, centerX:50, centerY:50, segments:16, meshBlur:200, meshStops:[{x:50,y:50,color:'#888888'}], noiseType:'turbulent', noiseScale:350, noiseComplexity:5, colorize:true, blendMode:'screen' }
-  },
-
-  patterns: {
-    'Koch Snowflake':     { patternType:'lsystem', preset:'Koch Snowflake',      iterations:4,  angle:60,  customAxiom:'', size:0, strokeWidth:1.5, color:'#a3e635', animType:'draw', animDuration:3, outerRadius:100, innerRadius:40, penRadius:60, steps:720 },
-    'Dragon Curve':       { patternType:'lsystem', preset:'Dragon Curve',        iterations:10, angle:90,  customAxiom:'', size:0, strokeWidth:1,   color:'#f87171', animType:'draw', animDuration:4, outerRadius:100, innerRadius:40, penRadius:60, steps:720 },
-    'Sierpinski':         { patternType:'lsystem', preset:'Sierpinski Triangle', iterations:5,  angle:120, customAxiom:'', size:0, strokeWidth:1.2, color:'#38bdf8', animType:'draw', animDuration:3, outerRadius:100, innerRadius:40, penRadius:60, steps:720 },
-    'Forest Plant':       { patternType:'lsystem', preset:'Plant',               iterations:5,  angle:25,  customAxiom:'', size:0, strokeWidth:1,   color:'#4ade80', animType:'draw', animDuration:5, outerRadius:100, innerRadius:40, penRadius:60, steps:720 },
-    'Classic Spirograph': { patternType:'spirograph', preset:'Koch Snowflake',   iterations:4,  angle:60,  customAxiom:'', size:0, strokeWidth:1.5, color:'#e879f9', animType:'draw', animDuration:3, outerRadius:100, innerRadius:37, penRadius:90, steps:1080 },
-    'Star Spirograph':    { patternType:'spirograph', preset:'Koch Snowflake',   iterations:4,  angle:60,  customAxiom:'', size:0, strokeWidth:1,   color:'#fbbf24', animType:'draw', animDuration:2, outerRadius:100, innerRadius:25, penRadius:70, steps:900 }
-  },
-
-  physics: {
-    'Gravity Drop':   { duration:3, gravityX:0,   gravityY:980,  gravityScale:1, bounce:0.55, friction:0.01, groundFriction:0.15, groundY:-1, mass:1, initialVelX:0,   initialVelY:0,    wallBounce:true,  simulateRotation:true,  magnetism:false, magnetismType:'attract', magnetismStrength:200, magnetismRange:400, exportContacts:false, constraints:[] },
-    'Bouncy Ball':    { duration:5, gravityX:0,   gravityY:800,  gravityScale:1, bounce:0.82, friction:0.005,groundFriction:0.05, groundY:-1, mass:1, initialVelX:120, initialVelY:-400, wallBounce:true,  simulateRotation:false, magnetism:false, magnetismType:'attract', magnetismStrength:200, magnetismRange:400, exportContacts:false, constraints:[] },
-    'Zero Gravity':   { duration:4, gravityX:0,   gravityY:0,    gravityScale:1, bounce:1.0,  friction:0,    groundFriction:0,    groundY:-1, mass:1, initialVelX:200, initialVelY:-150, wallBounce:true,  simulateRotation:true,  magnetism:false, magnetismType:'attract', magnetismStrength:200, magnetismRange:400, exportContacts:false, constraints:[] },
-    'Heavy Landing':  { duration:2, gravityX:0,   gravityY:1800, gravityScale:1, bounce:0.2,  friction:0.02, groundFriction:0.4,  groundY:-1, mass:3, initialVelX:0,   initialVelY:0,    wallBounce:false, simulateRotation:false, magnetism:false, magnetismType:'attract', magnetismStrength:200, magnetismRange:400, exportContacts:false, constraints:[] },
-    'Magnetic Swirl': { duration:4, gravityX:0,   gravityY:0,    gravityScale:0, bounce:0.8,  friction:0.005,groundFriction:0,    groundY:-1, mass:1, initialVelX:150, initialVelY:-100, wallBounce:true,  simulateRotation:true,  magnetism:true,  magnetismType:'attract', magnetismStrength:500, magnetismRange:600, exportContacts:false, constraints:[] }
-  },
-
-  particles: {
-    'Sparks':    { emitterType:'point', emitterX:50, emitterY:90, emitterSizeX:0,    emitterSizeY:0,  rate:12, maxParticles:150, life:1.2, lifeVariance:0.5, direction:-90, spread:80,  velocity:400, velocityVariance:0.5, gravityX:0, gravityY:600,  wind:30, turbulence:40, drag:0.01, sizeStart:5,  sizeEnd:1,  opacityStart:100, opacityEnd:0,  color:'#fbbf24', duration:3 },
-    'Smoke':     { emitterType:'box',   emitterX:50, emitterY:85, emitterSizeX:120,  emitterSizeY:30, rate:5,  maxParticles:80,  life:3,   lifeVariance:0.4, direction:-90, spread:20,  velocity:60,  velocityVariance:0.3, gravityX:0, gravityY:-30,  wind:15, turbulence:20, drag:0.03, sizeStart:20, sizeEnd:60, opacityStart:40,  opacityEnd:0,  color:'#cccccc', duration:4 },
-    'Fireworks': { emitterType:'ring',  emitterX:50, emitterY:40, emitterSizeX:200,  emitterSizeY:200,rate:20, maxParticles:200, life:1.8, lifeVariance:0.3, direction:0,   spread:360, velocity:300, velocityVariance:0.4, gravityX:0, gravityY:400,  wind:0,  turbulence:10, drag:0.02, sizeStart:8,  sizeEnd:2,  opacityStart:100, opacityEnd:0,  color:'#f0abfc', duration:3 },
-    'Snow':      { emitterType:'box',   emitterX:50, emitterY:5,  emitterSizeX:1000, emitterSizeY:0,  rate:6,  maxParticles:120, life:5,   lifeVariance:0.6, direction:90,  spread:15,  velocity:80,  velocityVariance:0.5, gravityX:0, gravityY:50,   wind:20, turbulence:15, drag:0.05, sizeStart:6,  sizeEnd:4,  opacityStart:80,  opacityEnd:60, color:'#ffffff', duration:5 },
-    'Fire':      { emitterType:'box',   emitterX:50, emitterY:90, emitterSizeX:80,   emitterSizeY:10, rate:10, maxParticles:100, life:1.0, lifeVariance:0.5, direction:-90, spread:40,  velocity:150, velocityVariance:0.5, gravityX:0, gravityY:-120, wind:0,  turbulence:60, drag:0.02, sizeStart:14, sizeEnd:4,  opacityStart:90,  opacityEnd:0,  color:'#ff6b00', duration:3 }
-  },
-
-  glitchmosh: {
-    'Heavy Bleed':   { masterIntensity:90,  masterSeed:42, bleedEnabled:true,  bleedAmount:90, bleedDecay:85, bleedFrames:6, bleedLumaThresh:30, smearEnabled:true,  smearLength:80,  smearDirection:0, smearStretch:40, blockEnabled:false, rgbEnabled:true,  rgbHSplit:4,  rgbVSplit:1,  rgbChromaBleed:60, stutterEnabled:true,  stutterRate:12, holdDuration:3, stutterSeed:7,  noiseEnabled:false, maskMode:0, maskFeather:20 },
-    'Block Party':   { masterIntensity:85,  masterSeed:13, bleedEnabled:false, smearEnabled:false, blockEnabled:true, blockSize:48, blockOffset:80, blockChaos:90, blockDropRate:8, blockColorShift:50, rgbEnabled:true,  rgbHSplit:12, rgbVSplit:6,  rgbChromaBleed:30, stutterEnabled:true,  stutterRate:6,  holdDuration:4, stutterSeed:22, noiseEnabled:true,  noiseAmount:30, grainSize:3, ringIntensity:20, maskMode:0, maskFeather:10 },
-    'Subtle Glitch': { masterIntensity:35,  masterSeed:99, bleedEnabled:true,  bleedAmount:30, bleedDecay:70, bleedFrames:2, bleedLumaThresh:60, smearEnabled:true,  smearLength:40,  smearDirection:0, smearStretch:20, blockEnabled:false, rgbEnabled:true,  rgbHSplit:3,  rgbVSplit:1,  rgbChromaBleed:15, stutterEnabled:false, noiseEnabled:true,  noiseAmount:10, grainSize:1, ringIntensity:5,  maskMode:1, maskFeather:40 },
-    'RGB Drift':     { masterIntensity:75,  masterSeed:55, bleedEnabled:true,  bleedAmount:50, bleedDecay:60, bleedFrames:4, bleedLumaThresh:50, smearEnabled:false, blockEnabled:false, rgbEnabled:true,  rgbHSplit:20, rgbVSplit:8,  rgbChromaBleed:80, stutterEnabled:false, noiseEnabled:false, maskMode:0, maskFeather:20 },
-    'Full Corrupt':  { masterIntensity:100, masterSeed:1,  bleedEnabled:true,  bleedAmount:95, bleedDecay:90, bleedFrames:8, bleedLumaThresh:20, smearEnabled:true,  smearLength:200, smearDirection:2, smearStretch:90, blockEnabled:true,  blockSize:24, blockOffset:90, blockChaos:100, blockDropRate:4, blockColorShift:70, rgbEnabled:true, rgbHSplit:24, rgbVSplit:12, rgbChromaBleed:90, stutterEnabled:true, stutterRate:4, holdDuration:6, stutterSeed:3, noiseEnabled:true, noiseAmount:60, grainSize:4, ringIntensity:40, maskMode:0, maskFeather:5 }
   }
 
 };
