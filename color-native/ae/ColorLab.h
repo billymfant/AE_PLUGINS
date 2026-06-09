@@ -5,8 +5,9 @@
  *  Shared definitions for the AE host adapter (ColorLab.cpp). The grading MATH
  *  lives entirely in ../core/ (colorlab::grade); this .aex is a thin adapter.
  *
- *  MVP scope (this build): CPU SmartRender path, primaries + 3-way wheels +
- *  output. Curves + HSL secondary + GPU SmartRender + scope emit are follow-ups
+ *  Scope (this build): CPU SmartRender path, primaries + 3-way wheels + output
+ *  + tone curves (Master + per-channel R/G/B, 16-node LUT each, driven by the
+ *  CEP panel). HSL secondary + GPU SmartRender + scope emit are follow-ups
  *  (the engine already supports them; see README).
  */
 #pragma once
@@ -43,7 +44,12 @@ enum {
     CLP_LINEAR,       /* checkbox             default ON  */
     CLP_TONEMAP,      /* popup None/Soft/Filmic default Soft */
     CLP_HICOMP,       /* %          0..100    default 50  */
-    CL_NUM_PARAMS     /* keep last */
+    /* tone curves: 4 channels (Master,R,G,B) x 16 LUT nodes (x = i/15),
+     * value 0..1, identity default. Contiguous from CLP_CURVE_BASE so
+     * ReadParams can index params[CLP_CURVE_BASE + ch*16 + i]. */
+    CLP_CURVE_BASE,
+    CL_NUM_PARAMS = CLP_CURVE_BASE + 64   /* keep last (4 ch x 16 nodes) */
 };
 
+#define CL_CURVE_N        16
 #define CL_TONEMAP_CHOICES "None|Soft-clip|Filmic"   /* values 1,2,3 == colorlab::TONE_* */

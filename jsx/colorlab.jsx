@@ -18,6 +18,46 @@ var ColorLab = (function () {
              clamp((-0.5 * x - 0.866 * y) * S) ];
   }
 
+  // ── Tone curves: sample a control-point list {x,y}[] to a fixed 16-node LUT
+  //    (x = i/15). Monotone-cubic eval mirrors the panel + the native engine
+  //    (color_params.h), so panel preview == render. ─────────────────────────
+  var CURVE_N = 16;
+  function _crvPrepare(pts) {
+    var n = pts.length, d = [], m = [], i;
+    if (n < 2) return m;
+    for (i = 0; i < n - 1; i++) { var h = pts[i+1].x - pts[i].x; d[i] = h > 1e-6 ? (pts[i+1].y - pts[i].y) / h : 0; }
+    m[0] = d[0]; m[n-1] = d[n-2];
+    for (i = 1; i < n - 1; i++) m[i] = (d[i-1]*d[i] <= 0) ? 0 : 0.5*(d[i-1]+d[i]);
+    for (i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = 0; m[i+1] = 0; continue; }
+      var a = m[i]/d[i], b = m[i+1]/d[i], s = a*a + b*b;
+      if (s > 9) { var t = 3/Math.sqrt(s); m[i] = t*a*d[i]; m[i+1] = t*b*d[i]; }
+    }
+    return m;
+  }
+  function _crvEval(pts, m, x) {
+    var n = pts.length;
+    if (n < 2) return x;
+    if (x <= pts[0].x) return pts[0].y + (x - pts[0].x) * m[0];
+    if (x >= pts[n-1].x) return pts[n-1].y + (x - pts[n-1].x) * m[n-1];
+    var i = 0; while (i < n-1 && x > pts[i+1].x) i++;
+    var h = pts[i+1].x - pts[i].x, t = (x - pts[i].x)/h, t2 = t*t, t3 = t2*t;
+    var h00 = 2*t3-3*t2+1, h10 = t3-2*t2+t, h01 = -2*t3+3*t2, h11 = t3-t2;
+    return h00*pts[i].y + h10*h*m[i] + h01*pts[i+1].y + h11*h*m[i+1];
+  }
+  // Push a channel's 16 LUT nodes onto the native params "Curve <ch> 00..15".
+  // Silent if the params are missing (older .aex) — graceful no-op.
+  function _pushCurve(fx, ch, pts) {
+    var m = (pts && pts.length >= 2) ? _crvPrepare(pts) : null;
+    for (var i = 0; i < CURVE_N; i++) {
+      var x = i / (CURVE_N - 1);
+      var y = m ? _crvEval(pts, m, x) : x;
+      if (y < 0) y = 0; else if (y > 1) y = 1;
+      var nn = (i < 10 ? '0' : '') + i;
+      _set(fx, 'Curve ' + ch + ' ' + nn, y);
+    }
+  }
+
   // Reuse an existing ColorLab on the layer (re-apply = live update), else add.
   function _fx(layer) {
     var parade = layer.property('ADBE Effect Parade');
@@ -90,6 +130,14 @@ var ColorLab = (function () {
         _set(fx, 'Linear Light',          (params.linearLight === undefined ? true : params.linearLight) ? 1 : 0);
         _set(fx, 'Tonemap',               num(params.tonemap, 2));            // 1 None 2 Soft 3 Filmic
         _set(fx, 'Highlight Compression', num(params.highlightComp, 50));
+
+        // tone curves (Master + per-channel R/G/B) — always pushed so a reset
+        // to identity propagates; silent on an older .aex without these params.
+        var crv = params.curves || {};
+        _pushCurve(fx, 'M', crv.m);
+        _pushCurve(fx, 'R', crv.r);
+        _pushCurve(fx, 'G', crv.g);
+        _pushCurve(fx, 'B', crv.b);
 
         count++;
       }

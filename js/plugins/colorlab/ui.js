@@ -14,11 +14,19 @@ window.ColorLabUI = (function () {
     gammaX: 0, gammaY: 0, gammaLuma: 0,
     gainX: 0, gainY: 0, gainLuma: 0,
     linearLight: true, tonemap: 2, highlightComp: 50,
-    applyToSelection: false
+    applyToSelection: false,
+    // tone curves — each channel is a list of {x,y} control points in 0..1,
+    // identity = the two diagonal endpoints. Sampled to a 16-node LUT on apply.
+    curves: _identityCurves()
   };
+  function _identityCurves() {
+    function id() { return [{ x: 0, y: 0 }, { x: 1, y: 1 }]; }
+    return { m: id(), r: id(), g: id(), b: id() };
+  }
+
   var _state = Utils.deepClone(_defaults);
 
-  var _sliders = {}, _wheels = {}, _linearToggle, _tonemapDD, _applyMode, _status;
+  var _sliders = {}, _wheels = {}, _curveEditor, _linearToggle, _tonemapDD, _applyMode, _status;
 
   function getParams() { return Utils.deepClone(_state); }
 
@@ -50,6 +58,9 @@ window.ColorLabUI = (function () {
     if (_wheels.lift)  { _wheels.lift.redraw(p.liftX || 0, p.liftY || 0);   _wheels.lift.setLuma(p.liftLuma || 0); }
     if (_wheels.gamma) { _wheels.gamma.redraw(p.gammaX || 0, p.gammaY || 0); _wheels.gamma.setLuma(p.gammaLuma || 0); }
     if (_wheels.gain)  { _wheels.gain.redraw(p.gainX || 0, p.gainY || 0);   _wheels.gain.setLuma(p.gainLuma || 0); }
+    // Presets define a full look: load their curves, or reset to identity.
+    _state.curves = p.curves ? Utils.deepClone(p.curves) : _identityCurves();
+    if (_curveEditor) _curveEditor.redraw();
   }
 
   // ── Color helpers (HSL -> RGB for the wheel render) ────────────
@@ -280,6 +291,152 @@ window.ColorLabUI = (function () {
 
   function _section(c, text) { c.appendChild(Utils.el('div', { class: 'section-label' }, text)); }
 
+  // ── Tone-curve editor ──────────────────────────────────────────
+  // Monotone-cubic (Fritsch–Carlson) — a faithful port of the native engine's
+  // prepareCurve/evalCurve (color_params.h) so the panel preview matches render.
+  var _CURVE_CH = [
+    { key: 'm', label: 'M', color: '#e8e8e8' },
+    { key: 'r', label: 'R', color: '#ff5a5a' },
+    { key: 'g', label: 'G', color: '#5ad07a' },
+    { key: 'b', label: 'B', color: '#5a9cff' }
+  ];
+  function _curvePrepare(pts) {
+    var n = pts.length, d = [], m = new Array(n), i;
+    if (n < 2) return m;
+    for (i = 0; i < n - 1; i++) { var h = pts[i+1].x - pts[i].x; d[i] = h > 1e-6 ? (pts[i+1].y - pts[i].y) / h : 0; }
+    m[0] = d[0]; m[n-1] = d[n-2];
+    for (i = 1; i < n - 1; i++) m[i] = (d[i-1]*d[i] <= 0) ? 0 : 0.5*(d[i-1]+d[i]);
+    for (i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = 0; m[i+1] = 0; continue; }
+      var a = m[i]/d[i], b = m[i+1]/d[i], s = a*a + b*b;
+      if (s > 9) { var t = 3/Math.sqrt(s); m[i] = t*a*d[i]; m[i+1] = t*b*d[i]; }
+    }
+    return m;
+  }
+  function _curveEval(pts, m, x) {
+    var n = pts.length;
+    if (n < 2) return x;
+    if (x <= pts[0].x)   return pts[0].y   + (x - pts[0].x)   * m[0];
+    if (x >= pts[n-1].x) return pts[n-1].y + (x - pts[n-1].x) * m[n-1];
+    var i = 0; while (i < n-1 && x > pts[i+1].x) i++;
+    var h = pts[i+1].x - pts[i].x, t = (x - pts[i].x)/h, t2 = t*t, t3 = t2*t;
+    var h00 = 2*t3-3*t2+1, h10 = t3-2*t2+t, h01 = -2*t3+3*t2, h11 = t3-t2;
+    return h00*pts[i].y + h10*h*m[i] + h01*pts[i+1].y + h11*h*m[i+1];
+  }
+
+  function _makeCurveEditor() {
+    var W = 256, H = 168, pad = 9, active = 'm';
+    var wrap = Utils.el('div', { class: 'cl-curve' });
+
+    var tabs = Utils.el('div', { class: 'cl-curve-tabs' });
+    var tabBtns = {};
+    _CURVE_CH.forEach(function (ch) {
+      var b = Utils.el('button', { class: 'cl-curve-tab', title: ch.label + ' channel' }, ch.label);
+      b.style.setProperty('--ch', ch.color);
+      b.addEventListener('click', function () { active = ch.key; _syncTabs(); _draw(); });
+      tabBtns[ch.key] = b; tabs.appendChild(b);
+    });
+    var resetBtn = Utils.el('button', { class: 'cl-curve-reset', title: 'Reset this channel' }, '×');
+    resetBtn.addEventListener('click', function () {
+      _state.curves[active] = [{ x: 0, y: 0 }, { x: 1, y: 1 }]; _draw(); _scheduleLive();
+    });
+    tabs.appendChild(resetBtn);
+    wrap.appendChild(tabs);
+
+    var canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H; canvas.className = 'cl-curve-canvas';
+    wrap.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    var hint = Utils.el('div', { class: 'cl-curve-hint' }, 'click to add · drag to shape · double-click a point to remove');
+    wrap.appendChild(hint);
+
+    function _syncTabs() { _CURVE_CH.forEach(function (ch) { tabBtns[ch.key].classList.toggle('active', ch.key === active); }); }
+    function gx(x) { return pad + x * (W - 2*pad); }
+    function gy(y) { return (H - pad) - y * (H - 2*pad); }
+    function ux(px) { return (px - pad) / (W - 2*pad); }
+    function uy(py) { return ((H - pad) - py) / (H - 2*pad); }
+    function _clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+    function _drawCurve(key, color, alpha, withPts) {
+      var pts = _state.curves[key], m = _curvePrepare(pts), px, first = true;
+      ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = withPts ? 1.6 : 1;
+      ctx.beginPath();
+      for (px = pad; px <= W - pad; px++) {
+        var y = _clamp01(_curveEval(pts, m, ux(px))), py = gy(y);
+        if (first) { ctx.moveTo(px, py); first = false; } else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      if (withPts) {
+        for (var i = 0; i < pts.length; i++) {
+          ctx.beginPath(); ctx.arc(gx(pts[i].x), gy(pts[i].y), 4, 0, Math.PI*2);
+          ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#0d0d0d'; ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+    function _draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(pad, pad, W - 2*pad, H - 2*pad);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+      for (var i = 1; i < 4; i++) {
+        var vx = gx(i/4), hy = gy(i/4);
+        ctx.beginPath(); ctx.moveTo(vx, pad); ctx.lineTo(vx, H - pad); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(pad, hy); ctx.lineTo(W - pad, hy); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(gx(0), gy(0)); ctx.lineTo(gx(1), gy(1)); ctx.stroke(); ctx.setLineDash([]);
+      _CURVE_CH.forEach(function (ch) { if (ch.key !== active) _drawCurve(ch.key, ch.color, 0.22, false); });
+      var ach = _CURVE_CH.filter(function (c) { return c.key === active; })[0];
+      _drawCurve(active, ach.color, 1, true);
+    }
+
+    function _pos(e) {
+      var rect = canvas.getBoundingClientRect();
+      return { px: (e.clientX - rect.left) * (canvas.width / rect.width),
+               py: (e.clientY - rect.top)  * (canvas.height / rect.height) };
+    }
+    function _hit(px, py) {
+      var pts = _state.curves[active];
+      for (var i = 0; i < pts.length; i++) {
+        var dx = px - gx(pts[i].x), dy = py - gy(pts[i].y);
+        if (dx*dx + dy*dy <= 64) return i;
+      }
+      return -1;
+    }
+    var _dragIdx = -1;
+    function _onMove(e) {
+      if (_dragIdx < 0) return;
+      var p = _pos(e), pts = _state.curves[active], n = pts.length, y = _clamp01(uy(p.py));
+      if (_dragIdx === 0)        { pts[0].x = 0; pts[0].y = y; }
+      else if (_dragIdx === n-1) { pts[n-1].x = 1; pts[n-1].y = y; }
+      else {
+        var lo = pts[_dragIdx-1].x + 0.002, hi = pts[_dragIdx+1].x - 0.002;
+        var x = _clamp01(ux(p.px)); x = x < lo ? lo : (x > hi ? hi : x);
+        pts[_dragIdx].x = x; pts[_dragIdx].y = y;
+      }
+      _draw(); _scheduleLive();
+    }
+    canvas.addEventListener('mousedown', function (e) {
+      var p = _pos(e), pts = _state.curves[active], hit = _hit(p.px, p.py);
+      if (hit < 0) {
+        var x = _clamp01(ux(p.px)), y = _clamp01(uy(p.py)), i = 0;
+        while (i < pts.length && pts[i].x < x) i++;
+        if (i === 0) i = 1; if (i >= pts.length) i = pts.length - 1;  // keep endpoints terminal
+        pts.splice(i, 0, { x: x, y: y }); hit = i;
+      }
+      _dragIdx = hit;
+      _activeDrag = { move: _onMove, up: function () { _dragIdx = -1; } };
+      _onMove(e); e.preventDefault();
+    });
+    canvas.addEventListener('dblclick', function (e) {
+      var p = _pos(e), pts = _state.curves[active], hit = _hit(p.px, p.py);
+      if (hit > 0 && hit < pts.length - 1) { pts.splice(hit, 1); _draw(); _scheduleLive(); }
+    });
+
+    _syncTabs(); _draw();
+    return { el: wrap, redraw: _draw };
+  }
+
   // ── Init ───────────────────────────────────────────────────────
   function init(container) {
     // Hero: Color Wheels
@@ -327,6 +484,11 @@ window.ColorLabUI = (function () {
     container.appendChild(_sliders.temperature.el);
     container.appendChild(_sliders.tint.el);
     container.appendChild(_sliders.saturation.el);
+
+    // Curves (Master + per-channel R/G/B)
+    _section(container, 'Curves');
+    _curveEditor = _makeCurveEditor();
+    container.appendChild(_curveEditor.el);
 
     // Output
     _section(container, 'Output');

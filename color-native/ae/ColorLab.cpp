@@ -25,6 +25,8 @@
 #include "String_Utils.h"
 
 #include "color_core.h"   // colorlab::Image / Params / grade
+#include <cstdio>         // sprintf — tone-curve param names
+#include <cmath>          // fabsf — identity-curve detection
 
 #include <string.h>
 #include <math.h>
@@ -106,8 +108,47 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
     PF_ADD_FLOAT_SLIDERX("Highlight Compression", 0, 100, 0, 100, 50,
                          PF_Precision_INTEGER, 0, 0, CLP_HICOMP);
 
+    // Tone-curve LUT nodes: 4 channels (Master,R,G,B) x 16, range 0..1, identity
+    // default (node i = i/15). Driven by the CEP panel; named so colorlab.jsx can
+    // set them by display name ("Curve M 00".."Curve B 15").
+    {
+        const char* chTag[4] = { "M", "R", "G", "B" };
+        char nm[32];
+        for (int ch = 0; ch < 4; ++ch) {
+            for (int i = 0; i < CL_CURVE_N; ++i) {
+                PF_FpLong dflt = (PF_FpLong)i / (PF_FpLong)(CL_CURVE_N - 1);
+                sprintf(nm, "Curve %s %02d", chTag[ch], i);
+                AEFX_CLR_STRUCT(def);
+                PF_ADD_FLOAT_SLIDERX(nm, 0, 1, 0, 1, dflt,
+                                     PF_Precision_THOUSANDTHS, 0, 0,
+                                     CLP_CURVE_BASE + ch * CL_CURVE_N + i);
+            }
+        }
+    }
+
     out_data->num_params = CL_NUM_PARAMS;
     return err;
+}
+
+/* Rebuild one tone curve from its 16 LUT params (fixed x = i/15). If every node
+ * is at its identity default, leave the curve at n=0 (evalCurve = pass-through),
+ * so untouched channels cost nothing at render time. */
+static void
+ReadCurve(colorlab::Curve& c, PF_ParamDef* params[], int base)
+{
+    float y[CL_CURVE_N];
+    bool  identity = true;
+    for (int i = 0; i < CL_CURVE_N; ++i) {
+        y[i] = (float)(params[base + i]->u.fs_d.value);
+        if (fabsf(y[i] - (float)i / (float)(CL_CURVE_N - 1)) > 1e-4f) identity = false;
+    }
+    if (identity) { c.n = 0; return; }
+    c.n = CL_CURVE_N;
+    for (int i = 0; i < CL_CURVE_N; ++i) {
+        c.x[i] = (float)i / (float)(CL_CURVE_N - 1);
+        c.y[i] = y[i];
+    }
+    colorlab::prepareCurve(c);
 }
 
 /* ================================================== AE params -> colorlab::Params */
@@ -138,7 +179,13 @@ ReadParams(PF_ParamDef* params[])
     p.linearLight   = params[CLP_LINEAR]->u.bd.value != 0;
     p.tonemap       = (int)params[CLP_TONEMAP]->u.pd.value;   // 1,2,3 == colorlab::TONE_*
     p.highlightComp = (float)(params[CLP_HICOMP]->u.fs_d.value / 100.0);
-    // curves stay identity; HSL stays disabled (follow-up).
+
+    // tone curves: Master + per-channel R/G/B (16-node LUTs from the panel).
+    ReadCurve(p.curveMaster, params, CLP_CURVE_BASE + 0 * CL_CURVE_N);
+    ReadCurve(p.curveR,      params, CLP_CURVE_BASE + 1 * CL_CURVE_N);
+    ReadCurve(p.curveG,      params, CLP_CURVE_BASE + 2 * CL_CURVE_N);
+    ReadCurve(p.curveB,      params, CLP_CURVE_BASE + 3 * CL_CURVE_N);
+    // HSL secondary stays disabled (follow-up).
     return p;
 }
 
