@@ -50,3 +50,6 @@ glow-native/ae/*.rc
 
 # Visual companion brainstorm sessions
 .superpowers/
+
+# native color engine build output
+color-native/build/
