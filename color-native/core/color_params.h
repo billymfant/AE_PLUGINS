@@ -70,6 +70,16 @@ struct Params {
     float gainR=0, gainG=0, gainB=0, gainLuma=0;
     // tone curves (identity by default; run prepareCurve() before grading)
     Curve curveMaster, curveR, curveG, curveB, curveLuma;
+    // HSL secondary (qualifier) — disabled by default
+    bool  hslEnable = false;
+    float hslCenterHue = 0.f;     // 0..1
+    float hslHueWidth  = 0.08f;   // half-width 0..0.5
+    float hslSatLo = 0.f, hslSatHi = 1.f;
+    float hslLumaLo = 0.f, hslLumaHi = 1.f;
+    float hslSoftness = 0.10f;
+    float hslHueAdj  = 0.f;       // radians, rotate within mask
+    float hslSatAdj  = 0.f;       // -1..1
+    float hslLumaAdj = 0.f;       // -1..1 (multiply by 1+adj*mask)
     // output
     bool  linearLight   = true;
     int   tonemap       = TONE_NONE;
@@ -125,6 +135,45 @@ CL_HD inline float toneSoftClip(float c, float knee) {
     if (c <= 0.f) return 0.f;
     float k = 0.25f + 1.75f * knee;           // stronger knee = earlier roll-off
     return c / (1.f + c * k) * (1.f + k);     // normalized so small values ~unchanged
+}
+
+// ---- HSL secondary qualifier helpers (shared host/device) ----
+CL_HD inline float smoothstep01(float e0, float e1, float x) {
+    float t = (x - e0) / (e1 - e0 + 1e-6f); t = t<0?0:(t>1?1:t);
+    return t*t*(3.f - 2.f*t);
+}
+CL_HD inline float hueOf(float r, float g, float b) {           // 0..1
+    float mx = fmaxf(r, fmaxf(g,b)), mn = fminf(r, fminf(g,b)), d = mx - mn;
+    if (d <= 1e-6f) return 0.f;
+    float h;
+    if      (mx == r) h = (g - b)/d + (g < b ? 6.f : 0.f);
+    else if (mx == g) h = (b - r)/d + 2.f;
+    else              h = (r - g)/d + 4.f;
+    return h / 6.f;
+}
+CL_HD inline float hsvSat(float r, float g, float b) {
+    float mx = fmaxf(r, fmaxf(g,b)), mn = fminf(r, fminf(g,b));
+    return mx <= 1e-6f ? 0.f : (mx - mn)/mx;
+}
+// hue membership with wraparound: 1 inside +-width, feathered over soft.
+CL_HD inline float hueMask(float hue, float center, float width, float soft) {
+    float d = fabsf(hue - center); if (d > 0.5f) d = 1.f - d;
+    return 1.f - smoothstep01(width, width + soft, d);
+}
+// range membership [lo,hi] with soft feather on both edges.
+CL_HD inline float rangeMaskLH(float v, float lo, float hi, float soft) {
+    float up = smoothstep01(lo - soft, lo, v);
+    float dn = 1.f - smoothstep01(hi, hi + soft, v);
+    return up * dn;
+}
+// luma-preserving hue rotation (radians) — SVG feColorMatrix hueRotate matrix.
+CL_HD inline void hueRotate(float& r, float& g, float& b, float a) {
+    float c = cosf(a), s = sinf(a);
+    float m00=0.213f+c*0.787f-s*0.213f, m01=0.715f-c*0.715f-s*0.715f, m02=0.072f-c*0.072f+s*0.928f;
+    float m10=0.213f-c*0.213f+s*0.143f, m11=0.715f+c*0.285f+s*0.140f, m12=0.072f-c*0.072f-s*0.283f;
+    float m20=0.213f-c*0.213f-s*0.787f, m21=0.715f-c*0.715f+s*0.715f, m22=0.072f+c*0.928f+s*0.072f;
+    float nr=m00*r+m01*g+m02*b, ng=m10*r+m11*g+m12*b, nb=m20*r+m21*g+m22*b;
+    r=nr; g=ng; b=nb;
 }
 
 } // namespace colorlab

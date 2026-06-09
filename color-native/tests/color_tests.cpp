@@ -96,6 +96,31 @@ static void test_curve_in_pipeline(){
     CHECK(im.px[0] > 0.3f);                       // 0.3 pushed up toward ~0.8 region
 }
 
+// ---- HSL secondary ----
+static void test_hsl_helpers(){
+    NEAR(hueOf(1,0,0), 0.f, 1e-4f);
+    NEAR(hueOf(0,1,0), 1.f/3.f, 1e-3f);
+    NEAR(hsvSat(1,0,0), 1.f, 1e-4f);
+    NEAR(hsvSat(0.5f,0.5f,0.5f), 0.f, 1e-4f);
+    CHECK(hueMask(0.f,0.f,0.1f,0.02f) > 0.95f);    // at center
+    CHECK(hueMask(0.5f,0.f,0.1f,0.02f) < 0.05f);   // opposite hue
+}
+static void test_hsl_mask_outside_is_zero(){
+    Image im = solid(2,2, 0.1f, 0.8f, 0.1f);       // pure green
+    Image ref = im;
+    Params P; P.linearLight=false; P.hslEnable=true;
+    P.hslCenterHue=0.f; P.hslHueWidth=0.05f; P.hslSoftness=0.02f; P.hslSatAdj=-1.f;
+    grade(im,P);                                   // qualifier on red -> green untouched
+    for(size_t i=0;i<im.px.size();++i) NEAR(im.px[i], ref.px[i], 2e-3f);
+}
+static void test_hsl_applies_at_center(){
+    Image im = solid(2,2, 0.8f, 0.1f, 0.1f);       // pure red
+    Params P; P.linearLight=false; P.hslEnable=true;
+    P.hslCenterHue=0.f; P.hslHueWidth=0.1f; P.hslSoftness=0.05f; P.hslSatAdj=-1.f;
+    grade(im,P);                                   // desaturate red within mask
+    CHECK(std::fabs(im.px[0]-im.px[1]) < std::fabs(0.8f-0.1f)); // moved toward gray
+}
+
 int main() {
     test_srgb_roundtrip();
     test_srgb_known();
@@ -109,6 +134,9 @@ int main() {
     test_curve_endpoints();
     test_curve_monotonic_no_overshoot();
     test_curve_in_pipeline();
+    test_hsl_helpers();
+    test_hsl_mask_outside_is_zero();
+    test_hsl_applies_at_center();
     if (g_fail) { printf("%d CHECK(S) FAILED\n", g_fail); return 1; }
     printf("ALL PASS\n"); return 0;
 }

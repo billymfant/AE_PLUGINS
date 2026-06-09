@@ -37,6 +37,9 @@ int main() {
       p.temperature=0.2f; p.tonemap=TONE_SOFTCLIP; p.highlightComp=0.6f; sweep.push_back(p); }
     { Params p; Curve c; c.n=3; c.x[0]=0;c.y[0]=0.05f; c.x[1]=0.5f;c.y[1]=0.6f; c.x[2]=1;c.y[2]=0.95f;
       prepareCurve(c); p.curveMaster=c; p.linearLight=false; sweep.push_back(p); }
+    { Params p; p.linearLight=false; p.hslEnable=true; p.hslCenterHue=0.08f;
+      p.hslHueWidth=0.12f; p.hslSoftness=0.08f; p.hslSatAdj=-0.6f; p.hslLumaAdj=0.2f;
+      p.hslHueAdj=0.2f; sweep.push_back(p); }
 
     float worst = 0.f; int idx = 0;
     for (size_t k = 0; k < sweep.size(); ++k) {

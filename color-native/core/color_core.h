@@ -42,6 +42,18 @@ CL_HD inline void gradePixel(float& r, float& g, float& b, const Params& P) {
         float s = (y > 1e-5f) ? ny / y : 1.f;
         r*=s; g*=s; b*=s;
     }
+    // 6b. HSL secondary (qualified hue/sat/luma adjustment)
+    if (P.hslEnable) {
+        float hue = hueOf(r,g,b), sv = hsvSat(r,g,b), yv = lumaRec709(r,g,b);
+        float m = hueMask(hue, P.hslCenterHue, P.hslHueWidth, P.hslSoftness)
+                * rangeMaskLH(sv, P.hslSatLo, P.hslSatHi, P.hslSoftness)
+                * rangeMaskLH(yv, P.hslLumaLo, P.hslLumaHi, P.hslSoftness);
+        if (m > 1e-5f) {
+            if (P.hslHueAdj  != 0.f) hueRotate(r,g,b, P.hslHueAdj * m);
+            if (P.hslSatAdj  != 0.f) applySaturation(r,g,b, P.hslSatAdj * m);
+            if (P.hslLumaAdj != 0.f) { float k = 1.f + P.hslLumaAdj * m; r*=k; g*=k; b*=k; }
+        }
+    }
     // 7. saturation
     if (P.saturation != 0.f) applySaturation(r,g,b,P.saturation);
     // 8. tone-map

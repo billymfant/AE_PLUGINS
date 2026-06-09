@@ -44,6 +44,9 @@ int main(int argc, char** argv){
         else if (!strcmp(a,"--gamma")){ P.gammaR=f(argv[++i]);P.gammaG=f(argv[++i]);P.gammaB=f(argv[++i]);P.gammaLuma=f(argv[++i]); }
         else if (!strcmp(a,"--gain")) { P.gainR=f(argv[++i]);P.gainG=f(argv[++i]);P.gainB=f(argv[++i]);P.gainLuma=f(argv[++i]); }
         else if (!strcmp(a,"--scurve")) P.curveMaster=sCurve(f(argv[++i]));
+        else if (!strcmp(a,"--hsl")) { // center width satAdj lumaAdj hueAdj
+            P.hslEnable=true; P.hslCenterHue=f(argv[++i]); P.hslHueWidth=f(argv[++i]);
+            P.hslSatAdj=f(argv[++i]); P.hslLumaAdj=f(argv[++i]); P.hslHueAdj=f(argv[++i]); }
         else if (!strcmp(a,"--no-linear")) P.linearLight=false;
         else if (!strcmp(a,"--softclip")) { P.tonemap=TONE_SOFTCLIP; P.highlightComp=f(argv[++i]); }
     }
