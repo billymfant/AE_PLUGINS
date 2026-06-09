@@ -117,7 +117,7 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
         for (int ch = 0; ch < 4; ++ch) {
             for (int i = 0; i < CL_CURVE_N; ++i) {
                 PF_FpLong dflt = (PF_FpLong)i / (PF_FpLong)(CL_CURVE_N - 1);
-                sprintf(nm, "Curve %s %02d", chTag[ch], i);
+                sprintf_s(nm, sizeof(nm), "Curve %s %02d", chTag[ch], i);
                 AEFX_CLR_STRUCT(def);
                 PF_ADD_FLOAT_SLIDERX(nm, 0, 1, 0, 1, dflt,
                                      PF_Precision_THOUSANDTHS, 0, 0,

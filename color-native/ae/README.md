@@ -21,10 +21,9 @@ CPU SmartRender path only (glow did the same in its M1). Exposes:
 `ReadParams()` maps these to `colorlab::Params`; `SmartRender` blits the input world into a
 `colorlab::Image`, calls `colorlab::grade()`, writes back 1:1.
 
-> ⚠️ **Curves were added in source but this `.aex` has NOT been rebuilt yet.** The shipped
-> `../build-ae/ColorLab.aex` predates the curve params, so the panel's curve UI is a no-op in
-> AE until you rebuild (see Build below). The panel + jsx already send the LUT (silently
-> ignored by the old binary). Not compile-verified on this machine — rebuild on the AE box.
+> ✅ **Curves built into `../build-ae/ColorLab.aex`** (rebuilt 2026-06-09, VS 2022 / AE SDK
+> 25.6, clean compile + link). Install: copy the `.aex` into AE's `Plug-ins` folder and fully
+> relaunch AE, then the panel's curve editor drives the render. Runtime in AE not yet eyeballed.
 
 ## Build
 ```
