@@ -2,6 +2,7 @@
 #include <cmath>
 #include "color_params.h"
 #include "color_core.h"
+#include "color_scopes.h"
 using namespace colorlab;
 
 static int g_fail = 0;
@@ -121,6 +122,41 @@ static void test_hsl_applies_at_center(){
     CHECK(std::fabs(im.px[0]-im.px[1]) < std::fabs(0.8f-0.1f)); // moved toward gray
 }
 
+// ---- scopes ----
+static unsigned sumArr(const std::vector<unsigned>& a){ unsigned s=0; for(unsigned v:a) s+=v; return s; }
+
+static void test_scopes_histogram_counts(){
+    Image im = solid(32,16, 0.5f,0.5f,0.5f);          // 512 px mid-gray
+    ScopeData s; computeScopes(im, s, 3);
+    // luma histogram total == pixel count
+    unsigned ly=0; for(int i=0;i<ScopeData::HBINS;++i) ly += s.hist[3*ScopeData::HBINS+i];
+    CHECK(ly == 512u);
+    // peak luma bin is the mid bin (~128)
+    int peak=0; unsigned best=0;
+    for(int i=0;i<ScopeData::HBINS;++i){ unsigned c=s.hist[3*ScopeData::HBINS+i]; if(c>best){best=c;peak=i;} }
+    CHECK(peak >= 126 && peak <= 130);
+    CHECK(s.srcW==32 && s.srcH==16 && s.frame==3);
+}
+static void test_scopes_waveform_solid_column(){
+    Image im = solid(32,16, 0.5f,0.5f,0.5f);
+    ScopeData s; computeScopes(im, s);
+    // column 0 should have all its mass (16 rows mapped) in a single luma bin
+    unsigned colSum=0, colMax=0;
+    for(int b=0;b<ScopeData::WFH;++b){ unsigned c=s.waveform[0*ScopeData::WFH+b]; colSum+=c; if(c>colMax)colMax=c; }
+    CHECK(colSum>0 && colMax==colSum);                 // single populated bin
+}
+static void test_scopes_file_roundtrip(){
+    Image im = solid(8,8, 0.2f,0.6f,0.9f);
+    ScopeData a; computeScopes(im, a, 7);
+    CHECK(writeScopeFile("color-native/build/scope_rt.bin", a));
+    ScopeData b;
+    CHECK(readScopeFile("color-native/build/scope_rt.bin", b));
+    CHECK(b.srcW==a.srcW && b.srcH==a.srcH && b.frame==7);
+    CHECK(sumArr(b.hist)==sumArr(a.hist));
+    CHECK(sumArr(b.waveform)==sumArr(a.waveform));
+    CHECK(sumArr(b.vec)==sumArr(a.vec));
+}
+
 int main() {
     test_srgb_roundtrip();
     test_srgb_known();
@@ -137,6 +173,9 @@ int main() {
     test_hsl_helpers();
     test_hsl_mask_outside_is_zero();
     test_hsl_applies_at_center();
+    test_scopes_histogram_counts();
+    test_scopes_waveform_solid_column();
+    test_scopes_file_roundtrip();
     if (g_fail) { printf("%d CHECK(S) FAILED\n", g_fail); return 1; }
     printf("ALL PASS\n"); return 0;
 }

@@ -5,6 +5,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include "../core/color_core.h"
+#include "../core/color_scopes.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -33,8 +34,10 @@ int main(int argc, char** argv){
     stbi_image_free(data);
 
     Params P;
+    const char* scopePath = nullptr;
     for (int i=3;i<argc;++i){
         const char* a=argv[i];
+        if (!strcmp(a,"--scopes")) { scopePath = argv[++i]; continue; }
         if      (!strcmp(a,"--exposure")) P.exposure=f(argv[++i]);
         else if (!strcmp(a,"--contrast")) P.contrast=f(argv[++i]);
         else if (!strcmp(a,"--temp"))     P.temperature=f(argv[++i]);
@@ -52,6 +55,12 @@ int main(int argc, char** argv){
     }
 
     grade(im, P);
+
+    if (scopePath) {
+        ScopeData sc; computeScopes(im, sc, 0);
+        if (writeScopeFile(scopePath, sc)) printf("scopes -> %s\n", scopePath);
+        else printf("scope write failed: %s\n", scopePath);
+    }
 
     std::vector<unsigned char> out((size_t)w*h*4);
     for (size_t i=0;i<out.size();++i){ float v=im.px[i]; v=v<0?0:(v>1?1:v); out[i]=(unsigned char)(v*255.f+0.5f); }

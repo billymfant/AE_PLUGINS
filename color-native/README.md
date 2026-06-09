@@ -23,8 +23,15 @@ color-native\build-cuda.bat
 color-native\build\color_parity.exe          REM -> "PARITY PASS (<= 1e-03)"
 ```
 
-Status: **P1–P4 DONE.** CPU core + CLI + tests pass (`ALL PASS`); CUDA mirror matches CPU within
-~9e-7 (`PARITY PASS`, target <1e-3). Engine = primaries + 3-way wheels + tone curves
-(`--scurve`) + HSL secondary qualifier (`--hsl center width satAdj lumaAdj hueAdj`).
-`gradePixel` is header-inline `CL_HD` — one source of math for CPU & GPU.
-Next: P5 scopes (engine-emit via mmap), then the `.aex` shell + panel.
+Status: **P1–P5 DONE (engine complete).** CPU core + CLI + tests pass (`ALL PASS`); CUDA mirror
+matches CPU within ~9e-7 (`PARITY PASS`, target <1e-3). Engine = primaries + 3-way wheels + tone
+curves (`--scurve`) + HSL secondary qualifier (`--hsl ...`) + scopes (histogram/waveform/
+vectorscope → serialized blob, `--scopes out.bin`). `gradePixel` is header-inline `CL_HD` — one
+source of math for CPU & GPU. **Next: the `.aex` SDK shell (`ae/`) + CEP panel** — the bridge into
+After Effects (verified on the AE machine, not this dev env).
+
+## Scopes (P5)
+`computeScopes()` in `core/color_scopes.{h,cpp}` builds RGB+luma histograms, a luma waveform, and a
+vectorscope from the graded image, serialized via `writeScopeFile`/`readScopeFile` (blob the panel
+reads). In AE the effect writes this to a memory-mapped temp file each render (panel-render fallback
+documented in the spec). GPU scope reduction is a later perf option.

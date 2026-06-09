@@ -18,9 +18,9 @@ where cl >nul 2>nul || ( echo [!] vcvars64 did not provide cl & exit /b 1 )
 pushd "%~dp0"
 if not exist build mkdir build
 echo Building color_tests.exe ...
-cl /nologo /EHsc /O2 /std:c++17 /I core tests\color_tests.cpp core\color_core.cpp /Fo:build\ /Fe:build\color_tests.exe || (popd & exit /b 1)
+cl /nologo /EHsc /O2 /std:c++17 /I core tests\color_tests.cpp core\color_core.cpp core\color_scopes.cpp /Fo:build\ /Fe:build\color_tests.exe || (popd & exit /b 1)
 echo Building color_cli.exe ...
-cl /nologo /EHsc /O2 /std:c++17 /I core cli\color_cli.cpp core\color_core.cpp /Fo:build\ /Fe:build\color_cli.exe || (popd & exit /b 1)
+cl /nologo /EHsc /O2 /std:c++17 /I core cli\color_cli.cpp core\color_core.cpp core\color_scopes.cpp /Fo:build\ /Fe:build\color_cli.exe || (popd & exit /b 1)
 echo OK
 popd
 endlocal
