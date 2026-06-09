@@ -17,5 +17,12 @@ color-native\build\color_tests.exe          REM all tests pass -> "ALL PASS"
 color-native\build\color_cli.exe in.png out.png --exposure 1.0 --sat 1.4
 ```
 
-Status: **P1 DONE** — CPU core + CLI + tests pass (`ALL PASS`); CLI grades real frames correctly.
-Next: P2 CUDA mirror + CPU↔GPU parity. Then `.aex` shell, then the panel.
+## CUDA parity build (P2)
+```
+color-native\build-cuda.bat
+color-native\build\color_parity.exe          REM -> "PARITY PASS (<= 1e-03)"
+```
+
+Status: **P1 + P2 DONE.** CPU core + CLI + tests pass (`ALL PASS`); CUDA mirror matches CPU
+within ~9e-7 (`PARITY PASS`, target <1e-3). `gradePixel` is header-inline `CL_HD` — one source
+of math for CPU & GPU. Next: P3 curves (LUT + editor), then P4 HSL, P5 scopes, then `.aex` + panel.
