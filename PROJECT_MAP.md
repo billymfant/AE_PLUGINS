@@ -6,10 +6,17 @@
 > breaks AE loading and the native build paths. That's why this is a *map*, not a
 > reshuffle.
 
+**Suite scope — 3 hero tools** (tab order): **Distortions** (`dist`), **Color Lab**
+(`colorlab`), **Deep Glow** (`glow`). The earlier 10-plugin lineup was pruned on
+2026-06-04; every cut tool (Slides, Grids, Sorter, Gradient, Patterns, Physics,
+Particles, GlitchMosh) is recoverable at tag `archive/pre-scope-reduction-2026-06-04`.
+
 ## "Where is…?" quick reference
 
 | You want… | It's here |
 |---|---|
+| The **Distortions panel UI** | `js/plugins/distortions/ui.js` |
+| The **Distortions ExtendScript** (stacks AE built-ins: Optics Compensation, Mesh Warp, Twirl, Wave Warp, Bulge — no native `.aex`) | `jsx/distortions.jsx` |
 | The **Deep Glow panel UI** (the interactive widget) | `js/plugins/glow/ui.js` |
 | The **Deep Glow ExtendScript** (applies the native effect) | `jsx/glow.jsx` |
 | The **compiled Deep Glow plugin** (what AE loads) | `glow-native/build-ae/DeepGlowGPU.aex` |
@@ -32,7 +39,8 @@
 ```
 AE_PLUGIN/
 ├─ index.html              CEP panel entry — the UI After Effects loads
-├─ preview.html            standalone UI preview (open in a browser)
+├─ preview.html            standalone UI preview (open in a browser) — 3-tab mirror
+│                          of index.html with a mock CEP bridge (no AE needed)
 ├─ CSXS/manifest.xml       CEP extension manifest (host = AEFT; -> index.html + jsx/dispatcher.jsx)
 ├─ lib/CSInterface.js      Adobe's CEP↔ExtendScript bridge lib
 │
@@ -42,7 +50,7 @@ AE_PLUGIN/
 │  ├─ core/                bridge.js (calls jsx), events, presets, sections, utils
 │  ├─ components/          reusable UI widgets: Slider, ButtonGroup, Dropdown,
 │  │                       ColorPicker, Toggle, Tooltip, PresetBar
-│  └─ plugins/<tool>/ui.js per-tool UI  ── Deep Glow = plugins/glow/ui.js · Color Lab = plugins/colorlab/ui.js
+│  └─ plugins/<tool>/ui.js per-tool UI (3 hero tools) ── distortions/ · colorlab/ · glow/
 │
 ├─ css/                    theme.css · layout.css · components.css (widget styles)
 │
@@ -50,6 +58,7 @@ AE_PLUGIN/
 │  ├─ dispatcher.jsx       routes dispatch("tool.action", json) to each module
 │  ├─ glow.jsx             Deep Glow → applies native "DKVB DeepGlowGPU" by match-name
 │  ├─ colorlab.jsx         Color Lab → applies native "DKVB ColorLab" by match-name (smart apply)
+│  ├─ distortions.jsx      Distortions → stacks AE built-in distort effects (no native .aex)
 │  └─ core/                shared helpers (utils.jsx, undo.jsx, …)
 │
 ├─ glow-native/            DEEP GLOW NATIVE C++/CUDA PLUGIN (separate from the panel)

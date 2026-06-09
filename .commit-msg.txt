@@ -1,0 +1,26 @@
+feat(colorlab): smoother trackball wheels + 16 curated presets
+
+Wheels (js/plugins/colorlab/ui.js):
+- relative drag (grab & nudge) instead of jump-to-cursor — the main "weird" feel
+- cache the static trackball to an offscreen canvas; dragging only repaints the
+  handle, coalesced via requestAnimationFrame (was a 9,216-px rebuild per event)
+- hold Shift = fine control, double-click = reset, grab/grabbing cursor,
+  center→handle guide line
+- css/components.css: grab cursor + .dragging grabbing cursor
+
+Presets (js/factory-presets.js):
+- replace the 12 presets with 16 curated grades ordered neutral → warm → cool →
+  film → stylized; Filmic tonemap on the cinematic looks
+
+Preview (preview.html):
+- load the real js/core/presets.js instead of a hardcoded stub so the preview
+  surfaces the actual FactoryPresets (was showing fake names, get() returned {})
+
+Docs (PROJECT_MAP.md):
+- add the "3 hero tools" scope note + archive tag, the missing Distortions
+  entries, distortions.jsx, and the rebuilt 3-tab preview description
+
+Verified headless: relative drag + double-click reset work, all 16 presets list
+and load, zero page errors.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>

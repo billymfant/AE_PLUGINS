@@ -387,12 +387,13 @@
 
 .cl-wheel-canvas {
   display: block;
-  cursor: crosshair;
+  cursor: grab;
   border-radius: 50%;
   transition: transform var(--t-fast), box-shadow var(--t-base);
   max-width: 100%;
   box-shadow: 0 3px 10px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.5);
 }
+.cl-wheel-canvas.dragging { cursor: grabbing; }
 
 /* premium "active wheel" magenta halo on hover */
 .cl-wheel-canvas:hover {

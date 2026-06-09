@@ -106,13 +106,8 @@ var Utils = {
   round: function(v, d) { return parseFloat(v.toFixed(d)); },
   deepClone: function(o) { return JSON.parse(JSON.stringify(o)); }
 };
-var Presets = {
-  list: function() { return Promise.resolve({ presets: ['Default', 'Soft Bloom', 'Neon Edge', 'Cinematic', 'Subtle Glow'], userPresets: ['My Preset'] }); },
-  get: function() { return Promise.resolve({}); },
-  save: function() { return Promise.resolve(); },
-  isFactory: function(pid, name) { return ['Default','Soft Bloom','Neon Edge','Cinematic','Subtle Glow'].indexOf(name) >= 0; },
-  'delete': function() { return Promise.resolve(); }
-};
+// Presets uses the REAL js/core/presets.js (loaded below) so the preview shows
+// the actual FactoryPresets. User save/load just round-trips the mock Bridge.
 var Bridge = {
   call: function(action) {
     return new Promise(function(res) {
@@ -140,6 +135,7 @@ var Bridge = {
 
 <!-- Built-in presets + the 3 hero plugin UIs (real modules) -->
 <script src="js/factory-presets.js"></script>
+<script src="js/core/presets.js"></script>
 <script src="js/plugins/distortions/ui.js"></script>
 <script src="js/plugins/colorlab/ui.js"></script>
 <script src="js/plugins/glow/ui.js"></script>

@@ -71,26 +71,34 @@ window.ColorLabUI = (function () {
     return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
   }
 
-  // ── DaVinci-style wheel: outer hue ring + inner saturation disc ─
-  function _drawWheel(canvas, dotX, dotY) {
-    var ctx = canvas.getContext('2d');
-    var W = canvas.width, H = canvas.height;
-    var cx = W / 2, cy = H / 2;
+  // ── Trackball geometry (shared by render + hit-testing) ────────
+  function _wheelGeom(size) {
+    var cx = size / 2, cy = size / 2;
     var outerR = cx - 0.5;
-    var ringW  = Math.round(outerR * 0.18);
-    var gap    = 2;
+    var ringW  = Math.round(outerR * 0.18), gap = 2;
     var innerR = outerR - ringW - gap;
-
-    // Premium dark machined trackball: dark radial body + faint rim hue-ring
-    // (not a bright rainbow), crisp crosshair, glowing magenta handle.
     var rimVis = Math.max(3, Math.round(outerR * 0.12));
     var bodyEdge = outerR - rimVis;
-    var img = ctx.createImageData(W, H), data = img.data;
-    for (var py = 0; py < H; py++) {
-      for (var px = 0; px < W; px++) {
+    return { cx: cx, cy: cy, outerR: outerR, innerR: innerR, bodyEdge: bodyEdge, rimVis: rimVis };
+  }
+
+  // ── Static trackball, rendered ONCE to an offscreen canvas and shared
+  //    by all three wheels. Dragging then only repaints the handle on top,
+  //    so motion stays smooth (no per-event per-pixel rebuild). ─────────
+  var _wheelBgCache = {};
+  function _wheelBackground(size) {
+    if (_wheelBgCache[size]) return _wheelBgCache[size];
+    var off = document.createElement('canvas');
+    off.width = size; off.height = size;
+    var ctx = off.getContext('2d');
+    var g = _wheelGeom(size), cx = g.cx, cy = g.cy, outerR = g.outerR, bodyEdge = g.bodyEdge, rimVis = g.rimVis;
+
+    var img = ctx.createImageData(size, size), data = img.data;
+    for (var py = 0; py < size; py++) {
+      for (var px = 0; px < size; px++) {
         var bx = px - cx, by = cy - py;
         var dist = Math.sqrt(bx * bx + by * by);
-        var idx = (py * W + px) * 4;
+        var idx = (py * size + px) * 4;
         if (dist > outerR) { data[idx + 3] = 0; continue; }
         if (dist >= bodyEdge) {
           // faint hue rim — dim hue blended over near-black, soft edge falloff
@@ -113,25 +121,37 @@ window.ColorLabUI = (function () {
     }
     ctx.putImageData(img, 0, 0);
 
-    // bezel ring (subtle dark + highlight) at the body edge
+    // bezel ring at the body edge
     ctx.beginPath(); ctx.arc(cx, cy, bodyEdge, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1; ctx.stroke();
-
     // faint crosshair
     ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(cx - innerR * 0.92, cy); ctx.lineTo(cx + innerR * 0.92, cy);
-    ctx.moveTo(cx, cy - innerR * 0.92); ctx.lineTo(cx, cy + innerR * 0.92);
+    ctx.moveTo(cx - g.innerR * 0.92, cy); ctx.lineTo(cx + g.innerR * 0.92, cy);
+    ctx.moveTo(cx, cy - g.innerR * 0.92); ctx.lineTo(cx, cy + g.innerR * 0.92);
     ctx.stroke();
-
     // center pip
     ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fill();
 
-    // glowing magenta handle
+    _wheelBgCache[size] = off;
+    return off;
+  }
+
+  // Composite: cached background + the live handle (cheap, runs every frame).
+  function _paintWheel(canvas, dotX, dotY) {
+    var ctx = canvas.getContext('2d');
+    var g = _wheelGeom(canvas.width);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(_wheelBackground(canvas.width), 0, 0);
+
     var dotDist = Math.sqrt(dotX * dotX + dotY * dotY);
-    var hx = cx + dotX * innerR, hy = cy - dotY * innerR;
-    if (dotDist > 0.025) {
+    var hx = g.cx + dotX * g.innerR, hy = g.cy - dotY * g.innerR;
+    if (dotDist > 0.02) {
+      // guide line center → handle (reads the balance direction at a glance)
+      ctx.strokeStyle = 'rgba(224,85,154,0.28)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(g.cx, g.cy); ctx.lineTo(hx, hy); ctx.stroke();
+      // glowing magenta handle
       ctx.shadowColor = 'rgba(224,85,154,0.85)'; ctx.shadowBlur = 9;
       ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#e0559a'; ctx.fill();
@@ -195,43 +215,68 @@ window.ColorLabUI = (function () {
       lumaVal.classList.toggle('nonzero', v !== 0);
       _setLumaBg(lumaInput, v);
     }
-    function updateFromEvent(e) {
+
+    // Relative trackball drag: grab anywhere and nudge — the handle moves by
+    // the pointer delta (not by jumping to the cursor). Smooth + precise.
+    // Hold Shift for fine control. Repaints are coalesced via rAF.
+    var _drag = null, _rafId = 0;
+    function _repaint() {
+      if (_rafId) return;
+      _rafId = requestAnimationFrame(function () {
+        _rafId = 0;
+        _paintWheel(canvas, _state[xKey] || 0, _state[yKey] || 0);
+        _updateHueVal(_state[xKey] || 0, _state[yKey] || 0);
+      });
+    }
+    function _onMove(e) {
+      if (!_drag) return;
       var rect = canvas.getBoundingClientRect();
-      var cxr = rect.width / 2, cyr = rect.height / 2;
-      var outerRPx = Math.min(cxr, cyr) - 0.5;
-      var ringWPx = Math.round(outerRPx * 0.18), gapPx = 2;
-      var innerRPx = outerRPx - ringWPx - gapPx;
-      var rawX = (e.clientX - rect.left - cxr) / innerRPx;
-      var rawY = (cyr - (e.clientY - rect.top)) / innerRPx;
-      var d = Math.sqrt(rawX * rawX + rawY * rawY);
-      if (d > 1) { rawX /= d; rawY /= d; }
-      _state[xKey] = rawX; _state[yKey] = rawY;
-      _drawWheel(canvas, rawX, rawY); _updateHueVal(rawX, rawY); _scheduleLive();
+      var g = _wheelGeom(canvas.width);
+      // pointer pixels → normalized units, accounting for any CSS scaling
+      var pxToNorm = 1 / ((rect.width / canvas.width) * g.innerR);
+      var fine = e.shiftKey ? 0.28 : 1;
+      var nx = _drag.vx + (e.clientX - _drag.px) * pxToNorm * fine;
+      var ny = _drag.vy - (e.clientY - _drag.py) * pxToNorm * fine;
+      var d = Math.sqrt(nx * nx + ny * ny);
+      if (d > 1) { nx /= d; ny /= d; }
+      _state[xKey] = nx; _state[yKey] = ny;
+      _repaint(); _scheduleLive();
     }
     canvas.addEventListener('mousedown', function (e) {
-      _activeDrag = { update: updateFromEvent }; updateFromEvent(e); e.preventDefault();
+      _drag = { px: e.clientX, py: e.clientY, vx: _state[xKey] || 0, vy: _state[yKey] || 0 };
+      _activeDrag = { move: _onMove, up: function () { _drag = null; } };
+      canvas.classList.add('dragging');
+      e.preventDefault();
+    });
+    canvas.addEventListener('dblclick', function () {
+      _state[xKey] = 0; _state[yKey] = 0; _repaint(); _scheduleLive();
     });
     lumaInput.addEventListener('input', function () {
       var v = parseInt(lumaInput.value, 10);
       _state[lumaKey] = v; _updateLumaVal(v); _scheduleLive();
     });
     resetBtn.addEventListener('click', function () {
-      _state[xKey] = 0; _state[yKey] = 0; _drawWheel(canvas, 0, 0); _updateHueVal(0, 0); _scheduleLive();
+      _state[xKey] = 0; _state[yKey] = 0; _repaint(); _scheduleLive();
     });
 
-    _drawWheel(canvas, _state[xKey] || 0, _state[yKey] || 0);
+    _paintWheel(canvas, _state[xKey] || 0, _state[yKey] || 0);
     _updateHueVal(_state[xKey] || 0, _state[yKey] || 0);
     _updateLumaVal(_state[lumaKey] || 0);
 
     return {
       el: cell,
-      redraw: function (x, y) { _state[xKey] = x; _state[yKey] = y; _drawWheel(canvas, x || 0, y || 0); _updateHueVal(x || 0, y || 0); },
+      redraw: function (x, y) { _state[xKey] = x; _state[yKey] = y; _paintWheel(canvas, x || 0, y || 0); _updateHueVal(x || 0, y || 0); },
       setLuma: function (v) { _state[lumaKey] = v; lumaInput.value = v; _updateLumaVal(v); }
     };
   }
 
-  document.addEventListener('mousemove', function (e) { if (_activeDrag) _activeDrag.update(e); });
-  document.addEventListener('mouseup', function () { _activeDrag = null; });
+  document.addEventListener('mousemove', function (e) { if (_activeDrag && _activeDrag.move) _activeDrag.move(e); });
+  document.addEventListener('mouseup', function () {
+    if (_activeDrag && _activeDrag.up) _activeDrag.up();
+    _activeDrag = null;
+    var d = document.querySelector('.cl-wheel-canvas.dragging');
+    if (d) d.classList.remove('dragging');
+  });
 
   function _section(c, text) { c.appendChild(Utils.el('div', { class: 'section-label' }, text)); }
 
