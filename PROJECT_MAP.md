@@ -28,6 +28,7 @@ Particles, GlitchMosh) is recoverable at tag `archive/pre-scope-reduction-2026-0
 | The **Color Lab engine source** (the math) | `color-native/core/` (CPU) + `color-native/cuda/` (GPU) |
 | The **shared panel design system** | `docs/design/DESIGN_LANGUAGE.md` |
 | **Color Lab spec + phase plans (P1–P5)** | `docs/superpowers/specs/2026-06-09-color-tool-native-design.md` · `docs/superpowers/plans/2026-06-09-color-tool-P*.md` |
+| **▶ FINAL PHASE plan** (ship-ready roadmap, F0–F7) | `docs/superpowers/plans/2026-06-09-final-phase-ship-ready.md` |
 | **Deep Glow status + plans + distribution** | `docs/handoffs/2026-06-08-deepglow-native-cep-handoff.md` |
 | **Engine tests / CPU-GPU parity** | `glow-native/tests/` · `glow-native/cuda/glow_parity.cpp` · `color-native/tests/` · `color-native/cuda/color_parity.cpp` |
 | The (superseded) **Electron app** | `electron-app/` |
