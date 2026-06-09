@@ -345,11 +345,21 @@
    Outer hue ring + inner saturation disc + luma mini-slider.
    Three wheels side-by-side: Lift · Gamma · Gain.
 ────────────────────────────────────────────────────────────── */
+/* Hero "instrument panel" frame around the three trackballs */
+.cl-wheels-hero {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 11px 9px 9px;
+  margin: 4px 0 8px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 1px 3px rgba(0,0,0,0.4);
+}
+
 .cl-wheels-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  margin: 4px 0 2px;
+  gap: 7px;
+  margin: 0;
 }
 
 .cl-wheel-cell {
@@ -360,11 +370,11 @@
 }
 
 .cl-wheel-title {
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
 }
 
 .cl-wheel-canvas-wrap {
@@ -379,11 +389,17 @@
   display: block;
   cursor: crosshair;
   border-radius: 50%;
-  transition: transform var(--t-fast);
+  transition: transform var(--t-fast), box-shadow var(--t-base);
   max-width: 100%;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.5);
 }
 
-.cl-wheel-canvas:hover { transform: scale(1.02); }
+/* premium "active wheel" magenta halo on hover */
+.cl-wheel-canvas:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 16px var(--tab-glow, rgba(224,85,154,0.32)),
+              0 3px 10px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.5);
+}
 
 .cl-wheel-reset {
   position: absolute;

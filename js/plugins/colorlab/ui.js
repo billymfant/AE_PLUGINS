@@ -81,6 +81,10 @@ window.ColorLabUI = (function () {
     var gap    = 2;
     var innerR = outerR - ringW - gap;
 
+    // Premium dark machined trackball: dark radial body + faint rim hue-ring
+    // (not a bright rainbow), crisp crosshair, glowing magenta handle.
+    var rimVis = Math.max(3, Math.round(outerR * 0.12));
+    var bodyEdge = outerR - rimVis;
     var img = ctx.createImageData(W, H), data = img.data;
     for (var py = 0; py < H; py++) {
       for (var px = 0; px < W; px++) {
@@ -88,51 +92,51 @@ window.ColorLabUI = (function () {
         var dist = Math.sqrt(bx * bx + by * by);
         var idx = (py * W + px) * 4;
         if (dist > outerR) { data[idx + 3] = 0; continue; }
-        var angle = Math.atan2(by, bx); if (angle < 0) angle += 2 * Math.PI;
-        var hue = angle / (2 * Math.PI);
-        if (dist >= outerR - ringW) {
-          var rgb = _hslToRgb(hue, 1.0, 0.5);
-          var t = (dist - (outerR - ringW)) / ringW;
-          var bright = 1 - 0.25 * Math.pow(2 * t - 1, 2);
-          data[idx] = Math.min(255, Math.round(rgb.r * bright));
-          data[idx+1] = Math.min(255, Math.round(rgb.g * bright));
-          data[idx+2] = Math.min(255, Math.round(rgb.b * bright));
+        if (dist >= bodyEdge) {
+          // faint hue rim — dim hue blended over near-black, soft edge falloff
+          var ang = Math.atan2(by, bx); if (ang < 0) ang += 2 * Math.PI;
+          var rgb = _hslToRgb(ang / (2 * Math.PI), 0.85, 0.5);
+          var tt = (dist - bodyEdge) / rimVis;
+          var mix = 0.55 * (1 - 0.55 * Math.abs(2 * tt - 1));
+          data[idx]   = Math.round(10 * (1 - mix) + rgb.r * mix);
+          data[idx+1] = Math.round(10 * (1 - mix) + rgb.g * mix);
+          data[idx+2] = Math.round(12 * (1 - mix) + rgb.b * mix);
           data[idx+3] = 255;
-        } else if (dist > innerR) {
-          data[idx] = 14; data[idx+1] = 14; data[idx+2] = 14; data[idx+3] = 255;
         } else {
-          var sat = dist / innerR;
-          var rgb2 = _hslToRgb(hue, sat, 0.5);
-          var w = Math.pow(1 - sat, 1.4) * 0.75;
-          var r2 = rgb2.r + (255 - rgb2.r) * w;
-          var g2 = rgb2.g + (255 - rgb2.g) * w;
-          var b2 = rgb2.b + (255 - rgb2.b) * w;
-          var edge = sat > 0.88 ? Math.max(0.7, 1 - (sat - 0.88) * 2.8) : 1;
-          data[idx] = Math.min(255, Math.round(r2 * edge));
-          data[idx+1] = Math.min(255, Math.round(g2 * edge));
-          data[idx+2] = Math.min(255, Math.round(b2 * edge));
-          data[idx+3] = 255;
+          // dark machined body: radial shade, top edge a touch lighter (bezel)
+          var t = bodyEdge > 0 ? dist / bodyEdge : 0;
+          var base = Math.round(36 * (1 - t) + 9 * t);
+          if (by > 0) base += Math.round((by / outerR) * 9 * (1 - t));
+          data[idx] = base; data[idx+1] = base; data[idx+2] = base + 1; data[idx+3] = 255;
         }
       }
     }
     ctx.putImageData(img, 0, 0);
 
+    // bezel ring (subtle dark + highlight) at the body edge
+    ctx.beginPath(); ctx.arc(cx, cy, bodyEdge, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1; ctx.stroke();
+
+    // faint crosshair
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - innerR * 0.92, cy); ctx.lineTo(cx + innerR * 0.92, cy);
+    ctx.moveTo(cx, cy - innerR * 0.92); ctx.lineTo(cx, cy + innerR * 0.92);
+    ctx.stroke();
+
+    // center pip
+    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fill();
+
+    // glowing magenta handle
     var dotDist = Math.sqrt(dotX * dotX + dotY * dotY);
+    var hx = cx + dotX * innerR, hy = cy - dotY * innerR;
     if (dotDist > 0.025) {
-      var ringMidR = outerR - ringW / 2;
-      var dotAngle = Math.atan2(dotY, dotX);
-      var indX = cx + Math.cos(dotAngle) * ringMidR;
-      var indY = cy - Math.sin(dotAngle) * ringMidR;
-      ctx.beginPath(); ctx.arc(indX, indY, ringW * 0.32, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.shadowColor = 'rgba(224,85,154,0.85)'; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#e0559a'; ctx.fill();
+      ctx.shadowBlur = 0; ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
     }
-    var innerDotX = cx + dotX * innerR, innerDotY = cy - dotY * innerR;
-    var isCenter = dotDist < 0.025, dotR = isCenter ? 2.5 : 4.5;
-    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = isCenter ? 2 : 5;
-    ctx.beginPath(); ctx.arc(innerDotX, innerDotY, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = isCenter ? 'rgba(180,180,180,0.7)' : '#ffffff'; ctx.fill();
-    ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 1.5; ctx.stroke();
   }
 
   function _setLumaBg(input, val) {
@@ -163,7 +167,7 @@ window.ColorLabUI = (function () {
 
     var canvasWrap = Utils.el('div', { class: 'cl-wheel-canvas-wrap' });
     var canvas = document.createElement('canvas');
-    canvas.width = 88; canvas.height = 88; canvas.className = 'cl-wheel-canvas';
+    canvas.width = 96; canvas.height = 96; canvas.className = 'cl-wheel-canvas';
     var resetBtn = Utils.el('button', { class: 'cl-wheel-reset', title: 'Reset ' + label }, '×');
     canvasWrap.appendChild(canvas); canvasWrap.appendChild(resetBtn);
     cell.appendChild(canvasWrap);
@@ -242,7 +246,9 @@ window.ColorLabUI = (function () {
     wheelsRow.appendChild(_wheels.lift.el);
     wheelsRow.appendChild(_wheels.gamma.el);
     wheelsRow.appendChild(_wheels.gain.el);
-    container.appendChild(wheelsRow);
+    var wheelsHero = Utils.el('div', { class: 'cl-wheels-hero' });
+    wheelsHero.appendChild(wheelsRow);
+    container.appendChild(wheelsHero);
 
     // Primary
     _section(container, 'Primary');
