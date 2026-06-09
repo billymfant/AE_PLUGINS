@@ -13,6 +13,16 @@ using namespace colorlab;
 
 static float f(const char* s){ return (float)atof(s); }
 
+static colorlab::Curve sCurve(float k){ // k 0..1 contrast S-curve on master
+    using namespace colorlab; Curve d; d.n=5;
+    d.x[0]=0;    d.y[0]=0;
+    d.x[1]=0.25f;d.y[1]=0.25f-0.15f*k;
+    d.x[2]=0.5f; d.y[2]=0.5f;
+    d.x[3]=0.75f;d.y[3]=0.75f+0.15f*k;
+    d.x[4]=1;    d.y[4]=1;
+    prepareCurve(d); return d;
+}
+
 int main(int argc, char** argv){
     if (argc < 3){ printf("usage: color_cli in.png out.png [params]\n"); return 2; }
     int w,h,c; unsigned char* data = stbi_load(argv[1], &w,&h,&c, 4);
@@ -33,6 +43,7 @@ int main(int argc, char** argv){
         else if (!strcmp(a,"--lift")) { P.liftR=f(argv[++i]);P.liftG=f(argv[++i]);P.liftB=f(argv[++i]);P.liftLuma=f(argv[++i]); }
         else if (!strcmp(a,"--gamma")){ P.gammaR=f(argv[++i]);P.gammaG=f(argv[++i]);P.gammaB=f(argv[++i]);P.gammaLuma=f(argv[++i]); }
         else if (!strcmp(a,"--gain")) { P.gainR=f(argv[++i]);P.gainG=f(argv[++i]);P.gainB=f(argv[++i]);P.gainLuma=f(argv[++i]); }
+        else if (!strcmp(a,"--scurve")) P.curveMaster=sCurve(f(argv[++i]));
         else if (!strcmp(a,"--no-linear")) P.linearLight=false;
         else if (!strcmp(a,"--softclip")) { P.tonemap=TONE_SOFTCLIP; P.highlightComp=f(argv[++i]); }
     }

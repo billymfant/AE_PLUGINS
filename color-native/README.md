@@ -23,6 +23,7 @@ color-native\build-cuda.bat
 color-native\build\color_parity.exe          REM -> "PARITY PASS (<= 1e-03)"
 ```
 
-Status: **P1 + P2 DONE.** CPU core + CLI + tests pass (`ALL PASS`); CUDA mirror matches CPU
-within ~9e-7 (`PARITY PASS`, target <1e-3). `gradePixel` is header-inline `CL_HD` — one source
-of math for CPU & GPU. Next: P3 curves (LUT + editor), then P4 HSL, P5 scopes, then `.aex` + panel.
+Status: **P1 + P2 + P3 DONE.** CPU core + CLI + tests pass (`ALL PASS`); CUDA mirror matches CPU
+within ~9e-7 (`PARITY PASS`, target <1e-3). P3 adds tone curves (master/R/G/B/luma, monotonic
+cubic, no overshoot) — `--scurve` on the CLI. `gradePixel` is header-inline `CL_HD` — one source
+of math for CPU & GPU. Next: P4 HSL secondary, P5 scopes, then `.aex` shell + panel.

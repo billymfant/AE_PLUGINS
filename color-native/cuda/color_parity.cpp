@@ -35,6 +35,8 @@ int main() {
     { Params p; p.liftLuma=0.15f; p.gammaG=0.2f; p.gainR=0.3f; sweep.push_back(p); }
     { Params p; p.exposure=-0.8f; p.contrast=0.3f; p.saturation=0.4f;
       p.temperature=0.2f; p.tonemap=TONE_SOFTCLIP; p.highlightComp=0.6f; sweep.push_back(p); }
+    { Params p; Curve c; c.n=3; c.x[0]=0;c.y[0]=0.05f; c.x[1]=0.5f;c.y[1]=0.6f; c.x[2]=1;c.y[2]=0.95f;
+      prepareCurve(c); p.curveMaster=c; p.linearLight=false; sweep.push_back(p); }
 
     float worst = 0.f; int idx = 0;
     for (size_t k = 0; k < sweep.size(); ++k) {

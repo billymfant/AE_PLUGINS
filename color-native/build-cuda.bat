@@ -6,7 +6,7 @@ if %errorlevel%==0 goto :have_cl
 
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if not exist "%VSWHERE%" ( echo [!] cl not on PATH and vswhere missing; run from a VS x64 Native Tools prompt & exit /b 1 )
-for /f "usebackq tokens=*" %%i in (`""%VSWHERE%" -latest -property installationPath" 2^>nul`) do set "VSPATH=%%i"
+for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -property installationPath`) do set "VSPATH=%%i"
 if not defined VSPATH ( echo [!] Visual Studio not found via vswhere & exit /b 1 )
 call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul
 where cl >nul 2>nul || ( echo [!] vcvars64 did not provide cl & exit /b 1 )

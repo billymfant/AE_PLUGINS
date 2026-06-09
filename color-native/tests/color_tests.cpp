@@ -64,6 +64,38 @@ static void test_alpha_preserved() {
     NEAR(im.px[3], 0.42f, 1e-6f);                  // alpha untouched
 }
 
+// ---- curves ----
+static Curve mkCurve3(float x0,float y0,float x1,float y1,float x2,float y2){
+    Curve c; c.n=3; c.x[0]=x0;c.y[0]=y0; c.x[1]=x1;c.y[1]=y1; c.x[2]=x2;c.y[2]=y2;
+    prepareCurve(c); return c;
+}
+static void test_curve_identity_returns_x(){
+    Curve c;                                      // n=0 => identity
+    NEAR(evalCurve(c,0.3f),0.3f,1e-6f); NEAR(evalCurve(c,0.9f),0.9f,1e-6f);
+}
+static void test_curve_endpoints(){
+    Curve c = mkCurve3(0,0, 0.5f,0.75f, 1,1);
+    NEAR(evalCurve(c,0.f),0.f,1e-5f); NEAR(evalCurve(c,1.f),1.f,1e-5f);
+    NEAR(evalCurve(c,0.5f),0.75f,1e-5f);
+}
+static void test_curve_monotonic_no_overshoot(){
+    Curve c = mkCurve3(0,0, 0.5f,0.75f, 1,1);     // lifted mids
+    float prev=-1.f;
+    for(float x=0;x<=1.f;x+=0.05f){
+        float v=evalCurve(c,x);
+        CHECK(v >= prev-1e-5f);                   // monotonic increasing
+        CHECK(v >= -1e-4f && v <= 1.0001f);       // no overshoot inside [0,1]
+        prev=v;
+    }
+}
+static void test_curve_in_pipeline(){
+    Image im = solid(2,2,0.3f,0.3f,0.3f);
+    Params P; P.linearLight=false;                // isolate the curve
+    P.curveMaster = mkCurve3(0,0, 0.5f,0.8f, 1,1);// raise mids
+    grade(im,P);
+    CHECK(im.px[0] > 0.3f);                       // 0.3 pushed up toward ~0.8 region
+}
+
 int main() {
     test_srgb_roundtrip();
     test_srgb_known();
@@ -73,6 +105,10 @@ int main() {
     test_desaturate_to_gray();
     test_lift_raises_blacks();
     test_alpha_preserved();
+    test_curve_identity_returns_x();
+    test_curve_endpoints();
+    test_curve_monotonic_no_overshoot();
+    test_curve_in_pipeline();
     if (g_fail) { printf("%d CHECK(S) FAILED\n", g_fail); return 1; }
     printf("ALL PASS\n"); return 0;
 }

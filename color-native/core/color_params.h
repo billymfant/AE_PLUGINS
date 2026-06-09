@@ -12,6 +12,49 @@ namespace colorlab {
 
 enum Tonemap { TONE_NONE = 1, TONE_SOFTCLIP = 2, TONE_FILMIC = 3 };
 
+static const int CL_MAXPTS = 16;
+
+// Tone curve as <=16 control points (x,y in nominal 0..1, x ascending).
+// n<2 => identity. m[] = monotone tangents filled by prepareCurve().
+struct Curve {
+    int   n = 0;
+    float x[CL_MAXPTS];
+    float y[CL_MAXPTS];
+    float m[CL_MAXPTS];
+};
+
+// Host: compute Fritsch-Carlson monotone tangents (call once before grading).
+inline void prepareCurve(Curve& c) {
+    int n = c.n;
+    if (n < 2) return;
+    float d[CL_MAXPTS];
+    for (int i = 0; i < n - 1; ++i) {
+        float h = c.x[i+1] - c.x[i];
+        d[i] = (h > 1e-6f) ? (c.y[i+1] - c.y[i]) / h : 0.f;
+    }
+    c.m[0] = d[0]; c.m[n-1] = d[n-2];
+    for (int i = 1; i < n - 1; ++i)
+        c.m[i] = (d[i-1]*d[i] <= 0.f) ? 0.f : 0.5f*(d[i-1]+d[i]);
+    for (int i = 0; i < n - 1; ++i) {
+        if (d[i] == 0.f) { c.m[i] = 0.f; c.m[i+1] = 0.f; continue; }
+        float a = c.m[i]/d[i], b = c.m[i+1]/d[i], s = a*a + b*b;
+        if (s > 9.f) { float t = 3.f/sqrtf(s); c.m[i] = t*a*d[i]; c.m[i+1] = t*b*d[i]; }
+    }
+}
+
+// Shared host/device: evaluate the curve (Hermite); extrapolate linearly outside.
+CL_HD inline float evalCurve(const Curve& c, float x) {
+    int n = c.n;
+    if (n < 2) return x;
+    if (x <= c.x[0])   return c.y[0]   + (x - c.x[0])   * c.m[0];
+    if (x >= c.x[n-1]) return c.y[n-1] + (x - c.x[n-1]) * c.m[n-1];
+    int i = 0; while (i < n-1 && x > c.x[i+1]) ++i;
+    float h = c.x[i+1] - c.x[i], t = (x - c.x[i]) / h;
+    float t2 = t*t, t3 = t2*t;
+    float h00 = 2*t3 - 3*t2 + 1, h10 = t3 - 2*t2 + t, h01 = -2*t3 + 3*t2, h11 = t3 - t2;
+    return h00*c.y[i] + h10*h*c.m[i] + h01*c.y[i+1] + h11*h*c.m[i+1];
+}
+
 // Normalized params. Wheel RGB pushes ~[-0.5,0.5], luma ~[-0.5,0.5]; defaults = identity.
 struct Params {
     // primaries
@@ -25,6 +68,8 @@ struct Params {
     float liftR=0, liftG=0, liftB=0, liftLuma=0;
     float gammaR=0, gammaG=0, gammaB=0, gammaLuma=0;
     float gainR=0, gainG=0, gainB=0, gainLuma=0;
+    // tone curves (identity by default; run prepareCurve() before grading)
+    Curve curveMaster, curveR, curveG, curveB, curveLuma;
     // output
     bool  linearLight   = true;
     int   tonemap       = TONE_NONE;

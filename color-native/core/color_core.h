@@ -33,7 +33,15 @@ CL_HD inline void gradePixel(float& r, float& g, float& b, const Params& P) {
         g=applyContrast(g,P.contrast,P.contrastPivot);
         b=applyContrast(b,P.contrast,P.contrastPivot);
     }
-    // 6. (curves P3, HSL P4 — no-op hooks here)
+    // 6. curves: master on each channel, then per-channel, then luma (chroma-preserving)
+    r=evalCurve(P.curveMaster,r); g=evalCurve(P.curveMaster,g); b=evalCurve(P.curveMaster,b);
+    r=evalCurve(P.curveR,r); g=evalCurve(P.curveG,g); b=evalCurve(P.curveB,b);
+    if (P.curveLuma.n >= 2) {
+        float y = lumaRec709(r,g,b);
+        float ny = evalCurve(P.curveLuma, y);
+        float s = (y > 1e-5f) ? ny / y : 1.f;
+        r*=s; g*=s; b*=s;
+    }
     // 7. saturation
     if (P.saturation != 0.f) applySaturation(r,g,b,P.saturation);
     // 8. tone-map
