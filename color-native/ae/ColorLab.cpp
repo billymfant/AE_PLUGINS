@@ -279,10 +279,12 @@ PF_Err PluginDataEntryFunction2(
     PF_PluginDataPtr inPtr, PF_PluginDataCB2 inPluginDataCallBackPtr,
     SPBasicSuite* inSPBasicSuitePtr, const char* inHostName, const char* inHostVersion)
 {
-    return PF_REGISTER_EFFECT_EXT2(
+    PF_Err result = PF_Err_INVALID_CALLBACK;
+    result = PF_REGISTER_EFFECT_EXT2(
         inPtr, inPluginDataCallBackPtr,
         CL_NAME, "DKVB ColorLab", CL_CATEGORY, AE_RESERVED_INFO,
         "EffectMain", "https://github.com/billymfant/AE_PLUGINS");
+    return result;
 }
 
 /* ============================================================ EffectMain */

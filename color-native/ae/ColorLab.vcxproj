@@ -18,7 +18,7 @@
   </PropertyGroup>
   <!-- Path to the vendored AE SDK's Examples folder (relative to this .vcxproj). -->
   <PropertyGroup Label="UserMacros">
-    <AE_SDK>$(ProjectDir)..\..\AfterEffectsSDK_25.6_61_win\ae25.6_61.64bit.AfterEffectsSDK\Examples</AE_SDK>
+    <AE_SDK>$(ProjectDir)..\..\sdk\ae25.6_61.64bit.AfterEffectsSDK\Examples</AE_SDK>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">

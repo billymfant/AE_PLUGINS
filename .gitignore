@@ -53,3 +53,11 @@ glow-native/ae/*.rc
 
 # native color engine build output
 color-native/build/
+
+# vendored AE SDK (extracted locally)
+/sdk/
+color-native/ae/x64/
+color-native/build-ae/*.ilk
+color-native/build-ae/*.exp
+color-native/build-ae/*.lib
+color-native/build-ae/*.pdb
