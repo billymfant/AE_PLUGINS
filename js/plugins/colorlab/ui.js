@@ -396,15 +396,34 @@ window.ColorLabUI = (function () {
       ctx.stroke();
       if (withPts) {
         for (var i = 0; i < pts.length; i++) {
-          ctx.beginPath(); ctx.arc(gx(pts[i].x), gy(pts[i].y), 4, 0, Math.PI*2);
+          ctx.beginPath(); ctx.arc(gx(pts[i].x), gy(pts[i].y), 5, 0, Math.PI*2);
           ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#0d0d0d'; ctx.stroke();
         }
       }
       ctx.globalAlpha = 1;
     }
+    // tonal ramp endpoints per channel: black -> white (luma) or black -> channel hue
+    function _rampHi() {
+      var c = { m: '#ffffff', r: '#ff5a5a', g: '#5ad07a', b: '#5a9cff' };
+      return c[active] || '#ffffff';
+    }
+    function _drawBackdrop() {
+      var strip = 6, hi = _rampHi();
+      // X strip along the bottom inside the plot
+      var gxL = gx(0), gxR = gx(1), yB = H - pad;
+      var gX = ctx.createLinearGradient(gxL, 0, gxR, 0);
+      gX.addColorStop(0, '#000'); gX.addColorStop(1, hi);
+      ctx.fillStyle = gX; ctx.fillRect(gxL, yB - strip, gxR - gxL, strip);
+      // Y strip up the left inside the plot
+      var gyB = gy(0), gyT = gy(1), xL = pad;
+      var gY = ctx.createLinearGradient(0, gyB, 0, gyT);
+      gY.addColorStop(0, '#000'); gY.addColorStop(1, hi);
+      ctx.fillStyle = gY; ctx.fillRect(xL, gyT, strip, gyB - gyT);
+    }
     function _draw() {
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(pad, pad, W - 2*pad, H - 2*pad);
+      _drawBackdrop();
       ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
       for (var i = 1; i < 4; i++) {
         var vx = gx(i/4), hy = gy(i/4);
