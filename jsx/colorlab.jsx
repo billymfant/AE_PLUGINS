@@ -127,8 +127,8 @@ var ColorLab = (function () {
         _set(fx, 'Gamma R', gamma[0]); _set(fx, 'Gamma G', gamma[1]); _set(fx, 'Gamma B', gamma[2]); _set(fx, 'Gamma Luma', gammaL);
         _set(fx, 'Gain R',  gain[0]);  _set(fx, 'Gain G',  gain[1]);  _set(fx, 'Gain B',  gain[2]);  _set(fx, 'Gain Luma',  gainL);
 
-        _set(fx, 'Linear Light',          (params.linearLight === undefined ? true : params.linearLight) ? 1 : 0);
-        _set(fx, 'Tonemap',               num(params.tonemap, 2));            // 1 None 2 Soft 3 Filmic
+        _set(fx, 'Linear Light',          (params.linearLight === undefined ? false : params.linearLight) ? 1 : 0);
+        _set(fx, 'Tonemap',               num(params.tonemap, 1));            // 1 None 2 Soft 3 Filmic
         _set(fx, 'Highlight Compression', num(params.highlightComp, 50));
 
         // tone curves (Master + per-channel R/G/B) — always pushed so a reset

@@ -13,7 +13,9 @@ window.ColorLabUI = (function () {
     liftX: 0, liftY: 0, liftLuma: 0,
     gammaX: 0, gammaY: 0, gammaLuma: 0,
     gainX: 0, gainY: 0, gainLuma: 0,
-    linearLight: true, tonemap: 2, highlightComp: 50,
+    // display-space grade by default (gentle, predictable) + no tonemap so a
+    // neutral panel = untouched image. Matches the native .aex defaults.
+    linearLight: false, tonemap: 1, highlightComp: 50,
     applyToSelection: false,
     // tone curves — each channel is a list of {x,y} control points in 0..1,
     // identity = the two diagonal endpoints. Sampled to a 16-node LUT on apply.
@@ -61,6 +63,16 @@ window.ColorLabUI = (function () {
     // Presets define a full look: load their curves, or reset to identity.
     _state.curves = p.curves ? Utils.deepClone(p.curves) : _identityCurves();
     if (_curveEditor) _curveEditor.redraw();
+  }
+
+  // Reset every control to neutral and push the cleared grade to AE live, so the
+  // user doesn't have to drag each slider back by hand. Keeps the current apply
+  // target (Adj Layer vs Selected) so reset doesn't change where the grade lands.
+  function resetAll() {
+    var keepSel = _state.applyToSelection;
+    applyPreset(Utils.deepClone(_defaults));
+    _state.applyToSelection = keepSel;
+    _scheduleLive();
   }
 
   // ── Color helpers (HSL -> RGB for the wheel render) ────────────
@@ -461,7 +473,7 @@ window.ColorLabUI = (function () {
     });
     _sliders.contrast = new Slider({
       label: 'Contrast', min: -100, max: 100, value: 0, step: 1, defaultValue: 0,
-      tooltip: 'Contrast around the pivot, in linear light.',
+      tooltip: 'Contrast around the mid-grey pivot.',
       onChange: function (v) { _state.contrast = v; _scheduleLive(); }
     });
     _sliders.temperature = new Slider({
@@ -493,15 +505,15 @@ window.ColorLabUI = (function () {
     // Output
     _section(container, 'Output');
     _linearToggle = new Toggle({
-      label: 'Linear Light', value: true,
-      tooltip: 'Grade in linear light (physically correct exposure/contrast). Recommended.',
+      label: 'Linear Light', value: false,
+      tooltip: 'Grade in display space (gentle, predictable — default). Turn ON for physically-linear exposure/contrast work.',
       onChange: function (v) { _state.linearLight = v; _scheduleLive(); }
     });
     _tonemapDD = new Dropdown({
       label: 'Tonemap',
-      tooltip: 'Roll off highlights so boosts do not hard-clip to white.',
+      tooltip: 'Roll off highlights so boosts do not hard-clip to white. None = no roll-off (default).',
       options: [ { value: 1, label: 'None' }, { value: 2, label: 'Soft-clip' }, { value: 3, label: 'Filmic' } ],
-      value: 2,
+      value: 1,
       onChange: function (v) { _state.tonemap = v; _scheduleLive(); }
     });
     _sliders.highlightComp = new Slider({
@@ -511,7 +523,7 @@ window.ColorLabUI = (function () {
     });
     _sliders.contrastPivot = new Slider({
       label: 'Pivot', min: 0, max: 1, value: 0.18, step: 0.01, decimals: 2, defaultValue: 0.18,
-      tooltip: 'Contrast pivot point in linear (0.18 = scene mid-grey).',
+      tooltip: 'Contrast pivot point (0.18 ≈ mid-grey).',
       onChange: function (v) { _state.contrastPivot = v; _scheduleLive(); }
     });
     container.appendChild(_linearToggle.el);
@@ -534,9 +546,11 @@ window.ColorLabUI = (function () {
       style: 'width:7px;height:7px;border-radius:50%;background:var(--success);opacity:0.4;flex-shrink:0;transition:opacity 0.2s;'
     });
     var liveLabel = Utils.el('span', { style: 'font-size:9px;color:var(--text-dim);letter-spacing:0.05em;' }, 'Live');
+    var resetBtn = Utils.el('button', { class: 'action-btn secondary', title: 'Reset all controls to neutral', style: 'margin-top:0;flex:0 0 auto;width:auto;padding:9px 12px;' }, 'Reset');
+    resetBtn.addEventListener('click', function () { resetAll(); });
     var applyBtn = Utils.el('button', { class: 'action-btn', style: 'margin-top:0;flex:1;' }, 'Apply Color');
     applyBtn.addEventListener('click', function () { _apply(applyBtn); });
-    applyRow.appendChild(_liveDot); applyRow.appendChild(liveLabel); applyRow.appendChild(applyBtn);
+    applyRow.appendChild(_liveDot); applyRow.appendChild(liveLabel); applyRow.appendChild(resetBtn); applyRow.appendChild(applyBtn);
     container.appendChild(applyRow);
 
     _status = Utils.el('div', { class: 'status-bar' }, '');
