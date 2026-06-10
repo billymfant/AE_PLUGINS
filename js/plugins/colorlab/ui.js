@@ -53,7 +53,8 @@ window.ColorLabUI = (function () {
     clearTimeout(_liveTimer);
     if (_liveDot) _liveDot.style.opacity = '0.5';
     _liveTimer = setTimeout(function () {
-      Bridge.call('colorlab.apply', getParams()).then(function () {
+      var lp = getParams(); lp.liveOnly = true;   // live preview UPDATES an existing grade only
+      Bridge.call('colorlab.apply', lp).then(function () {
         if (_liveDot) _liveDot.style.opacity = '0.4';
       }).catch(function () {
         if (_liveDot) _liveDot.style.opacity = '0';

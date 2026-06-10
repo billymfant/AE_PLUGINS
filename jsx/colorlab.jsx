@@ -59,12 +59,16 @@ var ColorLab = (function () {
   }
 
   // Reuse an existing ColorLab on the layer (re-apply = live update), else add.
-  function _fx(layer) {
+  // When `live` is true we ONLY update an existing grade — never add one — so the
+  // live preview can't spawn an effect/layer on its own. The explicit Apply Color
+  // button calls with live=false and creates it.
+  function _fx(layer, live) {
     var parade = layer.property('ADBE Effect Parade');
     for (var i = 1; i <= parade.numProperties; i++) {
       var p = parade.property(i);
       if (p && p.matchName === MATCH) return p;
     }
+    if (live) return null;
     if (!parade.canAddProperty(MATCH)) {
       throw new Error('Color Lab plugin not found. Install ColorLab.aex into the AE Plug-ins folder and relaunch AE.');
     }
@@ -79,10 +83,11 @@ var ColorLab = (function () {
 
   // Resolve the target layer(s): a shared "Color Lab" adjustment layer (default,
   // grades the whole scene) or the selected layers.
-  function _targets(comp, applyToSelection) {
+  function _targets(comp, applyToSelection, live) {
     if (applyToSelection) {
       var sel = comp.selectedLayers;
       if (!sel || sel.length === 0) {
+        if (live) return [];                 // live: no selection -> silently do nothing
         throw new Error('Select one or more layers, or switch to Adjustment Layer mode.');
       }
       return sel;
@@ -92,6 +97,7 @@ var ColorLab = (function () {
       if (comp.layers[i].name === 'Color Lab') { adj = comp.layers[i]; break; }
     }
     if (!adj) {
+      if (live) return [];                   // live: never create the adjustment layer on our own
       adj = comp.layers.addSolid([0, 0, 0], 'Color Lab', comp.width, comp.height, comp.pixelAspect);
       adj.adjustmentLayer = true;
       adj.moveToBeginning();
@@ -100,9 +106,10 @@ var ColorLab = (function () {
   }
 
   function apply(params) {
+    var live = !!params.liveOnly;
     return withUndo('Color Lab', function () {
       var comp = requireComp();
-      var layers = _targets(comp, !!params.applyToSelection);
+      var layers = _targets(comp, !!params.applyToSelection, live);
 
       var lift  = wheelRGB(num(params.liftX, 0),  num(params.liftY, 0));
       var gamma = wheelRGB(num(params.gammaX, 0), num(params.gammaY, 0));
@@ -112,9 +119,11 @@ var ColorLab = (function () {
       var gammaL = num(params.gammaLuma, 0) * 0.5;
       var gainL  = num(params.gainLuma, 0)  * 0.5;
 
-      var count = 0;
+      var count = 0, firstName = null;
       for (var li = 0; li < layers.length; li++) {
-        var fx = _fx(layers[li]);
+        var fx = _fx(layers[li], live);
+        if (!fx) continue;                   // live + no existing grade here -> skip (no-op)
+        if (!firstName) firstName = layers[li].name;
 
         _set(fx, 'Exposure (stops)',      num(params.exposure, 0));
         _set(fx, 'Contrast',              num(params.contrast, 0));
@@ -142,7 +151,7 @@ var ColorLab = (function () {
         count++;
       }
 
-      return { success: true, count: count, layer: layers[0].name };
+      return { success: true, count: count, layer: firstName };
     });
   }
 
