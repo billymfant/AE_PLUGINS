@@ -184,9 +184,11 @@ window.ColorLabUI = (function () {
   // Composite: cached background + the live handle (cheap, runs every frame).
   function _paintWheel(canvas, dotX, dotY) {
     var ctx = canvas.getContext('2d');
-    var g = _wheelGeom(canvas.width);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // canvas.width is the DPR-scaled backing store; geometry + clears must use the
+    // LOGICAL (CSS-px) size, since the context is dpr-transformed (see _fitCanvas).
     var _size = parseInt(canvas.style.width, 10) || (canvas.width / (window.devicePixelRatio || 1));
+    var g = _wheelGeom(_size);
+    ctx.clearRect(0, 0, _size, _size);
     ctx.drawImage(_wheelBackground(_size), 0, 0, _size, _size);
 
     var dotDist = Math.sqrt(dotX * dotX + dotY * dotY);
