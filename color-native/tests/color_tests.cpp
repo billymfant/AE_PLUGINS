@@ -96,6 +96,15 @@ static void test_curve_in_pipeline(){
     grade(im,P);
     CHECK(im.px[0] > 0.3f);                       // 0.3 pushed up toward ~0.8 region
 }
+static void test_curve_evaluated_in_display_space(){  // F1: curves are display-referred
+    // A node at x=0.5 -> y=0.75. Feed display mid-grey 0.5 with linearLight ON.
+    // Display-space eval: encode(0.214 lin)->0.5, curve->0.75, decode->re-encode ~0.75.
+    Image im = solid(2,2,0.5f,0.5f,0.5f);
+    Params P; P.linearLight=true;                 // the case the fix targets
+    P.curveMaster = mkCurve3(0,0, 0.5f,0.75f, 1,1);
+    grade(im,P);
+    CHECK(im.px[0] > 0.65f);                       // would land far lower under linear eval
+}
 
 // ---- HSL secondary ----
 static void test_hsl_helpers(){
@@ -170,6 +179,7 @@ int main() {
     test_curve_endpoints();
     test_curve_monotonic_no_overshoot();
     test_curve_in_pipeline();
+    test_curve_evaluated_in_display_space();
     test_hsl_helpers();
     test_hsl_mask_outside_is_zero();
     test_hsl_applies_at_center();

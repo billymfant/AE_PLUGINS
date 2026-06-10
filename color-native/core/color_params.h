@@ -81,7 +81,10 @@ struct Params {
     float hslSatAdj  = 0.f;       // -1..1
     float hslLumaAdj = 0.f;       // -1..1 (multiply by 1+adj*mask)
     // output
-    bool  linearLight   = true;
+    // linearLight OFF by default: the whole grade runs in display space so
+    // contrast/saturation/curves/white-balance feel like Lumetri/DaVinci (gentler,
+    // predictable). Turn ON for physically-linear exposure work. (Was true.)
+    bool  linearLight   = false;
     int   tonemap       = TONE_NONE;
     float highlightComp = 0.5f;   // 0..1 soft-clip knee strength
 };
@@ -99,11 +102,13 @@ CL_HD inline float lumaRec709(float r, float g, float b) {
     return 0.2126f * r + 0.7152f * g + 0.0722f * b;
 }
 
-// ---- white balance: per-channel gains in linear (approx chromatic adaptation) ----
+// ---- white balance: per-channel gains (approx chromatic adaptation) ----
+// Coefficients deliberately gentle: at full slider (+-1) Temp shifts R/B by 30%,
+// Tint by 12% — strong but not garish. (Was 0.50/0.20; halved-ish per user feedback.)
 CL_HD inline void applyWhiteBalance(float& r, float& g, float& b, float temp, float tint) {
-    float rGain = 1.f + 0.50f * temp + 0.20f * tint;
-    float gGain = 1.f - 0.30f * tint;
-    float bGain = 1.f - 0.50f * temp + 0.20f * tint;
+    float rGain = 1.f + 0.30f * temp + 0.12f * tint;
+    float gGain = 1.f - 0.18f * tint;
+    float bGain = 1.f - 0.30f * temp + 0.12f * tint;
     r *= rGain; g *= gGain; b *= bGain;
 }
 

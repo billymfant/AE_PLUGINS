@@ -101,9 +101,9 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
     AEFX_CLR_STRUCT(def); PF_ADD_FLOAT_SLIDERX("Gain Luma",  -50, 50, -50, 50, 0, PF_Precision_INTEGER, 0, 0, CLP_GAIN_L);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_CHECKBOX("Linear Light", "", TRUE, 0, CLP_LINEAR);
+    PF_ADD_CHECKBOX("Linear Light", "", FALSE, 0, CLP_LINEAR);   // default OFF: grade in display space
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("Tonemap", 3, colorlab::TONE_SOFTCLIP, CL_TONEMAP_CHOICES, CLP_TONEMAP);
+    PF_ADD_POPUP("Tonemap", 3, colorlab::TONE_NONE, CL_TONEMAP_CHOICES, CLP_TONEMAP);  // default None: neutral = untouched
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Highlight Compression", 0, 100, 0, 100, 50,
                          PF_Precision_INTEGER, 0, 0, CLP_HICOMP);

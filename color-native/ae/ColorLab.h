@@ -41,8 +41,8 @@ enum {
     /* gain (highlights) */
     CLP_GAIN_R, CLP_GAIN_G, CLP_GAIN_B, CLP_GAIN_L,
     /* output */
-    CLP_LINEAR,       /* checkbox             default ON  */
-    CLP_TONEMAP,      /* popup None/Soft/Filmic default Soft */
+    CLP_LINEAR,       /* checkbox             default OFF (grade in display space) */
+    CLP_TONEMAP,      /* popup None/Soft/Filmic default None */
     CLP_HICOMP,       /* %          0..100    default 50  */
     /* tone curves: 4 channels (Master,R,G,B) x 16 LUT nodes (x = i/15),
      * value 0..1, identity default. Contiguous from CLP_CURVE_BASE so

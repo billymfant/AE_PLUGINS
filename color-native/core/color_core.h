@@ -33,9 +33,16 @@ CL_HD inline void gradePixel(float& r, float& g, float& b, const Params& P) {
         g=applyContrast(g,P.contrast,P.contrastPivot);
         b=applyContrast(b,P.contrast,P.contrastPivot);
     }
-    // 6. curves: master on each channel, then per-channel, then luma (chroma-preserving)
-    r=evalCurve(P.curveMaster,r); g=evalCurve(P.curveMaster,g); b=evalCurve(P.curveMaster,b);
-    r=evalCurve(P.curveR,r); g=evalCurve(P.curveG,g); b=evalCurve(P.curveB,b);
+    // 6. curves: master, then per-channel — evaluated in DISPLAY space so a node
+    //    drawn at x=0.5 maps perceptual mid-grey (matches the panel curve editor).
+    //    When linearLight is on we encode->curve->decode; off, values already display.
+    if (P.curveMaster.n>=2 || P.curveR.n>=2 || P.curveG.n>=2 || P.curveB.n>=2) {
+        if (P.linearLight) { r=linear_to_srgb(r); g=linear_to_srgb(g); b=linear_to_srgb(b); }
+        r=evalCurve(P.curveMaster,r); g=evalCurve(P.curveMaster,g); b=evalCurve(P.curveMaster,b);
+        r=evalCurve(P.curveR,r); g=evalCurve(P.curveG,g); b=evalCurve(P.curveB,b);
+        if (P.linearLight) { r=srgb_to_linear(r); g=srgb_to_linear(g); b=srgb_to_linear(b); }
+    }
+    // then luma curve (chroma-preserving; luma is already perceptual)
     if (P.curveLuma.n >= 2) {
         float y = lumaRec709(r,g,b);
         float ny = evalCurve(P.curveLuma, y);
