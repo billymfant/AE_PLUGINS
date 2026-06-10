@@ -32,6 +32,21 @@ window.ColorLabUI = (function () {
 
   function getParams() { return Utils.deepClone(_state); }
 
+  // Size a canvas backing store to its on-screen size × devicePixelRatio so it
+  // renders crisp at any panel scale, and reset the 2D transform so all drawing
+  // stays in CSS-pixel units. Returns the logical {w,h} to draw within.
+  function _fitCanvas(canvas, cssW, cssH) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(1, Math.round(cssW)), h = Math.max(1, Math.round(cssH));
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: w, h: h, dpr: dpr };
+  }
+
   // ── Live preview (debounced 160ms per DESIGN_LANGUAGE) ─────────
   var _liveTimer = null, _liveDot = null;
   function _scheduleLive() {
@@ -337,7 +352,8 @@ window.ColorLabUI = (function () {
   }
 
   function _makeCurveEditor() {
-    var W = 256, H = 168, pad = 9, active = 'm';
+    var pad = 9, active = 'm';
+    var W = 256, H = 168;                 // logical px; recomputed in _resize()
     var wrap = Utils.el('div', { class: 'cl-curve' });
 
     var tabs = Utils.el('div', { class: 'cl-curve-tabs' });
@@ -356,7 +372,7 @@ window.ColorLabUI = (function () {
     wrap.appendChild(tabs);
 
     var canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H; canvas.className = 'cl-curve-canvas';
+    canvas.className = 'cl-curve-canvas';
     wrap.appendChild(canvas);
     var ctx = canvas.getContext('2d');
     var hint = Utils.el('div', { class: 'cl-curve-hint' }, 'click to add · drag to shape · double-click a point to remove');
@@ -402,10 +418,17 @@ window.ColorLabUI = (function () {
       _drawCurve(active, ach.color, 1, true);
     }
 
+    function _resize() {
+      var cssW = canvas.clientWidth || 256;
+      var cssH = Math.round(cssW * 0.66);          // keep ~3:2 editor
+      var dim = _fitCanvas(canvas, cssW, cssH);
+      W = dim.w; H = dim.h;
+      _draw();
+    }
+
     function _pos(e) {
       var rect = canvas.getBoundingClientRect();
-      return { px: (e.clientX - rect.left) * (canvas.width / rect.width),
-               py: (e.clientY - rect.top)  * (canvas.height / rect.height) };
+      return { px: (e.clientX - rect.left), py: (e.clientY - rect.top) };  // CSS px == draw units
     }
     function _hit(px, py) {
       var pts = _state.curves[active];
@@ -433,7 +456,7 @@ window.ColorLabUI = (function () {
       if (hit < 0) {
         var x = _clamp01(ux(p.px)), y = _clamp01(uy(p.py)), i = 0;
         while (i < pts.length && pts[i].x < x) i++;
-        if (i === 0) i = 1; if (i >= pts.length) i = pts.length - 1;  // keep endpoints terminal
+        if (i === 0) i = 1; if (i >= pts.length) i = pts.length - 1;
         pts.splice(i, 0, { x: x, y: y }); hit = i;
       }
       _dragIdx = hit;
@@ -445,8 +468,11 @@ window.ColorLabUI = (function () {
       if (hit > 0 && hit < pts.length - 1) { pts.splice(hit, 1); _draw(); _scheduleLive(); }
     });
 
-    _syncTabs(); _draw();
-    return { el: wrap, redraw: _draw };
+    _syncTabs();
+    if (window.ResizeObserver) { new ResizeObserver(_resize).observe(canvas); }
+    // first paint (deferred so clientWidth is measured after layout)
+    requestAnimationFrame(_resize);
+    return { el: wrap, redraw: function () { _resize(); } };
   }
 
   // ── Init ───────────────────────────────────────────────────────
