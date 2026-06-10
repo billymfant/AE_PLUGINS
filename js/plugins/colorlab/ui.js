@@ -219,24 +219,39 @@ window.ColorLabUI = (function () {
 
   var _activeDrag = null;
 
-  function _makeWheelCell(label, xKey, yKey, lumaKey) {
-    var cell = Utils.el('div', { class: 'cl-wheel-cell' });
-    cell.appendChild(Utils.el('div', { class: 'cl-wheel-title' }, label));
+  var _WHEELS = [
+    { key: 'lift',  label: 'Lift',  x: 'liftX',  y: 'liftY',  luma: 'liftLuma'  },
+    { key: 'gamma', label: 'Gamma', x: 'gammaX', y: 'gammaY', luma: 'gammaLuma' },
+    { key: 'gain',  label: 'Gain',  x: 'gainX',  y: 'gainY',  luma: 'gainLuma'  }
+  ];
+
+  function _makeWheelPanel() {
+    var active = _WHEELS[0];                 // 'lift' shown first
+    var WHEEL_CSS = 150;                      // on-screen wheel diameter (px)
+    var cell = Utils.el('div', { class: 'cl-wheel-single' });
+
+    // segmented Lift | Gamma | Gain
+    var seg = Utils.el('div', { class: 'cl-wheel-seg' });
+    var segBtns = {};
+    _WHEELS.forEach(function (w) {
+      var b = Utils.el('button', { class: 'cl-wheel-seg-btn', title: w.label + ' wheel' }, w.label);
+      b.addEventListener('click', function () { _setActive(w.key); });
+      segBtns[w.key] = b; seg.appendChild(b);
+    });
+    cell.appendChild(seg);
 
     var canvasWrap = Utils.el('div', { class: 'cl-wheel-canvas-wrap' });
     var canvas = document.createElement('canvas');
-    canvas.width = 96; canvas.height = 96; canvas.className = 'cl-wheel-canvas';
-    var resetBtn = Utils.el('button', { class: 'cl-wheel-reset', title: 'Reset ' + label }, '×');
+    canvas.className = 'cl-wheel-canvas';
+    var resetBtn = Utils.el('button', { class: 'cl-wheel-reset', title: 'Reset wheel' }, '×');
     canvasWrap.appendChild(canvas); canvasWrap.appendChild(resetBtn);
     cell.appendChild(canvasWrap);
 
     var lumaWrap = Utils.el('div', { class: 'cl-luma-wrap' });
     var lumaInput = document.createElement('input');
     lumaInput.type = 'range'; lumaInput.min = -100; lumaInput.max = 100; lumaInput.step = 1;
-    lumaInput.value = _state[lumaKey] || 0; lumaInput.className = 'cl-luma-mini';
-    lumaInput.title = label + ' luminance offset';
+    lumaInput.className = 'cl-luma-mini'; lumaInput.title = 'Luminance offset';
     var lumaVal = Utils.el('div', { class: 'cl-luma-val' }, '');
-    _setLumaBg(lumaInput, _state[lumaKey] || 0);
     lumaWrap.appendChild(lumaInput); lumaWrap.appendChild(lumaVal);
     cell.appendChild(lumaWrap);
 
@@ -245,8 +260,7 @@ window.ColorLabUI = (function () {
 
     function _updateHueVal(x, y) {
       var txt = _wheelValueText(x, y);
-      valueEl.textContent = txt;
-      valueEl.classList.toggle('active', txt !== '—');
+      valueEl.textContent = txt; valueEl.classList.toggle('active', txt !== '—');
     }
     function _updateLumaVal(v) {
       lumaVal.textContent = v !== 0 ? (v > 0 ? '+' + v : '' + v) : '';
@@ -254,58 +268,76 @@ window.ColorLabUI = (function () {
       _setLumaBg(lumaInput, v);
     }
 
-    // Relative trackball drag: grab anywhere and nudge — the handle moves by
-    // the pointer delta (not by jumping to the cursor). Smooth + precise.
-    // Hold Shift for fine control. Repaints are coalesced via rAF.
-    var _drag = null, _rafId = 0;
+    var _rafId = 0;
     function _repaint() {
       if (_rafId) return;
       _rafId = requestAnimationFrame(function () {
         _rafId = 0;
-        _paintWheel(canvas, _state[xKey] || 0, _state[yKey] || 0);
-        _updateHueVal(_state[xKey] || 0, _state[yKey] || 0);
+        _paintWheel(canvas, _state[active.x] || 0, _state[active.y] || 0);
+        _updateHueVal(_state[active.x] || 0, _state[active.y] || 0);
       });
     }
+    function _resize() {
+      _fitCanvas(canvas, WHEEL_CSS, WHEEL_CSS);
+      _paintWheel(canvas, _state[active.x] || 0, _state[active.y] || 0);
+    }
+
+    // relative-drag (grab & nudge), Shift = fine, on the ACTIVE wheel
+    var _drag = null;
     function _onMove(e) {
       if (!_drag) return;
       var rect = canvas.getBoundingClientRect();
-      var g = _wheelGeom(canvas.width);
-      // pointer pixels → normalized units, accounting for any CSS scaling
-      var pxToNorm = 1 / ((rect.width / canvas.width) * g.innerR);
+      var g = _wheelGeom(WHEEL_CSS);
+      var pxToNorm = 1 / ((rect.width / WHEEL_CSS) * g.innerR);
       var fine = e.shiftKey ? 0.28 : 1;
       var nx = _drag.vx + (e.clientX - _drag.px) * pxToNorm * fine;
       var ny = _drag.vy - (e.clientY - _drag.py) * pxToNorm * fine;
       var d = Math.sqrt(nx * nx + ny * ny);
       if (d > 1) { nx /= d; ny /= d; }
-      _state[xKey] = nx; _state[yKey] = ny;
+      _state[active.x] = nx; _state[active.y] = ny;
       _repaint(); _scheduleLive();
     }
     canvas.addEventListener('mousedown', function (e) {
-      _drag = { px: e.clientX, py: e.clientY, vx: _state[xKey] || 0, vy: _state[yKey] || 0 };
+      _drag = { px: e.clientX, py: e.clientY, vx: _state[active.x] || 0, vy: _state[active.y] || 0 };
       _activeDrag = { move: _onMove, up: function () { _drag = null; } };
-      canvas.classList.add('dragging');
-      e.preventDefault();
+      canvas.classList.add('dragging'); e.preventDefault();
     });
     canvas.addEventListener('dblclick', function () {
-      _state[xKey] = 0; _state[yKey] = 0; _repaint(); _scheduleLive();
+      _state[active.x] = 0; _state[active.y] = 0; _repaint(); _scheduleLive();
     });
     lumaInput.addEventListener('input', function () {
       var v = parseInt(lumaInput.value, 10);
-      _state[lumaKey] = v; _updateLumaVal(v); _scheduleLive();
+      _state[active.luma] = v; _updateLumaVal(v); _scheduleLive();
     });
     resetBtn.addEventListener('click', function () {
-      _state[xKey] = 0; _state[yKey] = 0; _repaint(); _scheduleLive();
+      _state[active.x] = 0; _state[active.y] = 0; _repaint(); _scheduleLive();
     });
 
-    _paintWheel(canvas, _state[xKey] || 0, _state[yKey] || 0);
-    _updateHueVal(_state[xKey] || 0, _state[yKey] || 0);
-    _updateLumaVal(_state[lumaKey] || 0);
+    function _setActive(key) {
+      active = _WHEELS.filter(function (w) { return w.key === key; })[0];
+      _WHEELS.forEach(function (w) { segBtns[w.key].classList.toggle('on', w.key === active.key); });
+      lumaInput.value = _state[active.luma] || 0;
+      _updateLumaVal(_state[active.luma] || 0);
+      _repaint();
+    }
 
-    return {
-      el: cell,
-      redraw: function (x, y) { _state[xKey] = x; _state[yKey] = y; _paintWheel(canvas, x || 0, y || 0); _updateHueVal(x || 0, y || 0); },
-      setLuma: function (v) { _state[lumaKey] = v; lumaInput.value = v; _updateLumaVal(v); }
-    };
+    if (window.ResizeObserver) { new ResizeObserver(_resize).observe(canvas); }
+    requestAnimationFrame(function () { _resize(); _setActive(active.key); });
+
+    // per-channel proxy so applyPreset()/resetAll() keep working unchanged
+    function _proxy(w) {
+      return {
+        redraw: function (x, y) {
+          _state[w.x] = x; _state[w.y] = y;
+          if (active.key === w.key) { _paintWheel(canvas, x || 0, y || 0); _updateHueVal(x || 0, y || 0); }
+        },
+        setLuma: function (v) {
+          _state[w.luma] = v;
+          if (active.key === w.key) { lumaInput.value = v; _updateLumaVal(v); }
+        }
+      };
+    }
+    return { el: cell, channels: { lift: _proxy(_WHEELS[0]), gamma: _proxy(_WHEELS[1]), gain: _proxy(_WHEELS[2]) } };
   }
 
   document.addEventListener('mousemove', function (e) { if (_activeDrag && _activeDrag.move) _activeDrag.move(e); });
@@ -498,15 +530,10 @@ window.ColorLabUI = (function () {
   function init(container) {
     // Hero: Color Wheels
     _section(container, 'Color Wheels');
-    var wheelsRow = Utils.el('div', { class: 'cl-wheels-row' });
-    _wheels.lift  = _makeWheelCell('Lift',  'liftX',  'liftY',  'liftLuma');
-    _wheels.gamma = _makeWheelCell('Gamma', 'gammaX', 'gammaY', 'gammaLuma');
-    _wheels.gain  = _makeWheelCell('Gain',  'gainX',  'gainY',  'gainLuma');
-    wheelsRow.appendChild(_wheels.lift.el);
-    wheelsRow.appendChild(_wheels.gamma.el);
-    wheelsRow.appendChild(_wheels.gain.el);
+    var _wheelPanel = _makeWheelPanel();
+    _wheels = _wheelPanel.channels;          // {lift,gamma,gain} proxies for applyPreset/resetAll
     var wheelsHero = Utils.el('div', { class: 'cl-wheels-hero' });
-    wheelsHero.appendChild(wheelsRow);
+    wheelsHero.appendChild(_wheelPanel.el);
     container.appendChild(wheelsHero);
 
     // Primary
