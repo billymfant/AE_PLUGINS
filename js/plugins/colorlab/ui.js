@@ -477,11 +477,22 @@ window.ColorLabUI = (function () {
       _drawCurve(active, ach.color, 1, true);
     }
 
+    var _lastW = 0;
     function _resize() {
+      // Measure but NEVER set inline style.width: the canvas has a 1px border and
+      // box-sizing:border-box, so feeding clientWidth back into style.width shrinks
+      // it 2px every ResizeObserver tick (infinite shrink loop). CSS width:100%
+      // drives display width; we only set the backing store + height.
       var cssW = canvas.clientWidth || 256;
-      var cssH = Math.round(cssW * 0.66);          // keep ~3:2 editor
-      var dim = _fitCanvas(canvas, cssW, cssH);
-      W = dim.w; H = dim.h;
+      if (cssW === _lastW) return;                 // guard ResizeObserver feedback
+      _lastW = cssW;
+      var cssH = Math.round(cssW * 0.66);          // ~3:2 editor
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width  = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      canvas.style.height = cssH + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      W = cssW; H = cssH;
       _draw();
     }
 
@@ -528,7 +539,9 @@ window.ColorLabUI = (function () {
     });
 
     _syncTabs();
-    if (window.ResizeObserver) { new ResizeObserver(_resize).observe(canvas); }
+    // observe the WRAP (its width is layout-driven), not the canvas (whose own size
+    // we mutate) — prevents the feedback loop. The _lastW guard absorbs height re-fires.
+    if (window.ResizeObserver) { new ResizeObserver(_resize).observe(wrap); }
     // first paint (deferred so clientWidth is measured after layout)
     requestAnimationFrame(_resize);
     return { el: wrap, redraw: function () { _resize(); } };
