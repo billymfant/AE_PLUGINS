@@ -125,54 +125,59 @@ window.ColorLabUI = (function () {
   //    so motion stays smooth (no per-event per-pixel rebuild). ─────────
   var _wheelBgCache = {};
   function _wheelBackground(size) {
-    if (_wheelBgCache[size]) return _wheelBgCache[size];
+    var dpr = window.devicePixelRatio || 1;
+    var ckey = size + '@' + dpr;
+    if (_wheelBgCache[ckey]) return _wheelBgCache[ckey];
     var off = document.createElement('canvas');
-    off.width = size; off.height = size;
+    off.width = Math.round(size * dpr); off.height = Math.round(size * dpr);
     var ctx = off.getContext('2d');
-    var g = _wheelGeom(size), cx = g.cx, cy = g.cy, outerR = g.outerR, bodyEdge = g.bodyEdge, rimVis = g.rimVis;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var g = _wheelGeom(size), cx = g.cx, cy = g.cy, outerR = g.outerR, bodyEdge = g.bodyEdge;
 
-    var img = ctx.createImageData(size, size), data = img.data;
-    for (var py = 0; py < size; py++) {
-      for (var px = 0; px < size; px++) {
-        var bx = px - cx, by = cy - py;
+    // dark machined body (per-pixel radial shade) — drawn at logical resolution
+    var img = ctx.createImageData(Math.round(size*dpr), Math.round(size*dpr)), data = img.data;
+    var S = Math.round(size*dpr);
+    for (var py = 0; py < S; py++) {
+      for (var px = 0; px < S; px++) {
+        var bx = px/dpr - cx, by = cy - py/dpr;
         var dist = Math.sqrt(bx * bx + by * by);
-        var idx = (py * size + px) * 4;
-        if (dist > outerR) { data[idx + 3] = 0; continue; }
-        if (dist >= bodyEdge) {
-          // faint hue rim — dim hue blended over near-black, soft edge falloff
-          var ang = Math.atan2(by, bx); if (ang < 0) ang += 2 * Math.PI;
-          var rgb = _hslToRgb(ang / (2 * Math.PI), 0.85, 0.5);
-          var tt = (dist - bodyEdge) / rimVis;
-          var mix = 0.55 * (1 - 0.55 * Math.abs(2 * tt - 1));
-          data[idx]   = Math.round(10 * (1 - mix) + rgb.r * mix);
-          data[idx+1] = Math.round(10 * (1 - mix) + rgb.g * mix);
-          data[idx+2] = Math.round(12 * (1 - mix) + rgb.b * mix);
-          data[idx+3] = 255;
-        } else {
-          // dark machined body: radial shade, top edge a touch lighter (bezel)
-          var t = bodyEdge > 0 ? dist / bodyEdge : 0;
-          var base = Math.round(36 * (1 - t) + 9 * t);
-          if (by > 0) base += Math.round((by / outerR) * 9 * (1 - t));
-          data[idx] = base; data[idx+1] = base; data[idx+2] = base + 1; data[idx+3] = 255;
-        }
+        var idx = (py * S + px) * 4;
+        if (dist > bodyEdge) { data[idx + 3] = 0; continue; }
+        var t = bodyEdge > 0 ? dist / bodyEdge : 0;
+        var base = Math.round(36 * (1 - t) + 9 * t);
+        if (by > 0) base += Math.round((by / outerR) * 9 * (1 - t));
+        data[idx] = base; data[idx+1] = base; data[idx+2] = base + 1; data[idx+3] = 255;
       }
     }
     ctx.putImageData(img, 0, 0);
 
-    // bezel ring at the body edge
-    ctx.beginPath(); ctx.arc(cx, cy, bodyEdge, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1; ctx.stroke();
-    // faint crosshair
+    // BOLD hue ring: full-saturation angular segments in the rim band
+    var ringOuter = outerR, ringInner = bodyEdge + 1, segs = 180;
+    for (var s = 0; s < segs; s++) {
+      var a0 = (s / segs) * 2 * Math.PI, a1 = ((s + 1) / segs) * 2 * Math.PI;
+      var hue = s / segs;                       // 0=red sweeping CCW
+      var rgb = _hslToRgb(hue, 0.95, 0.5);
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringOuter, -a0, -a1, true);
+      ctx.arc(cx, cy, ringInner, -a1, -a0, false);
+      ctx.closePath();
+      ctx.fillStyle = 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')';
+      ctx.fill();
+    }
+    // thin dark separators inside/outside the ring for definition
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.arc(cx, cy, ringInner, 0, Math.PI*2); ctx.stroke();
+
+    // faint crosshair + center pip on the body
     ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx - g.innerR * 0.92, cy); ctx.lineTo(cx + g.innerR * 0.92, cy);
     ctx.moveTo(cx, cy - g.innerR * 0.92); ctx.lineTo(cx, cy + g.innerR * 0.92);
     ctx.stroke();
-    // center pip
     ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fill();
 
-    _wheelBgCache[size] = off;
+    _wheelBgCache[ckey] = off;
     return off;
   }
 
@@ -181,7 +186,8 @@ window.ColorLabUI = (function () {
     var ctx = canvas.getContext('2d');
     var g = _wheelGeom(canvas.width);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(_wheelBackground(canvas.width), 0, 0);
+    var _size = parseInt(canvas.style.width, 10) || (canvas.width / (window.devicePixelRatio || 1));
+    ctx.drawImage(_wheelBackground(_size), 0, 0, _size, _size);
 
     var dotDist = Math.sqrt(dotX * dotX + dotY * dotY);
     var hx = g.cx + dotX * g.innerR, hy = g.cy - dotY * g.innerR;
