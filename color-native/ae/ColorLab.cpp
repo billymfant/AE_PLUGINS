@@ -42,16 +42,21 @@ About(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_LayerD
 
 /* ============================================================ GLOBAL_SETUP
  * out_flags / out_flags2 MUST match the PiPL hex:
- *   out_flags  = PIX_INDEPENDENT(0x400) | DEEP_COLOR_AWARE(0x2000000) = 0x2000400
+ *   out_flags  = PIX_INDEPENDENT(0x400) | DEEP_COLOR_AWARE(0x2000000)
+ *              | I_AM_OBSOLETE(1<<21 = 0x200000)                      = 0x2200400
  *   out_flags2 = SMART_RENDER(1<<10) | FLOAT_COLOR_AWARE(1<<12)
  *              | SUPPORTS_THREADED_RENDERING(1<<27)                   = 0x8001400
+ * I_AM_OBSOLETE hides Color Lab from AE's Effects menu / Effects & Presets so it
+ * is only applied via our CEP panel (jsx addProperty by match name). The effect
+ * still loads, renders, and accepts scripted params normally.
  * (No GPU flag in this MVP — CPU SmartRender only, like glow's M1.) */
 static PF_Err
 GlobalSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_LayerDef* output)
 {
     out_data->my_version = PF_VERSION(CL_MAJOR_VERSION, CL_MINOR_VERSION,
                                       CL_BUG_VERSION, CL_STAGE_VERSION, CL_BUILD_VERSION);
-    out_data->out_flags  = PF_OutFlag_PIX_INDEPENDENT | PF_OutFlag_DEEP_COLOR_AWARE;
+    out_data->out_flags  = PF_OutFlag_PIX_INDEPENDENT | PF_OutFlag_DEEP_COLOR_AWARE |
+                           PF_OutFlag_I_AM_OBSOLETE;
     out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
                            PF_OutFlag2_FLOAT_COLOR_AWARE |
                            PF_OutFlag2_SUPPORTS_THREADED_RENDERING;
