@@ -11,6 +11,16 @@
 2026-06-04; every cut tool (Slides, Grids, Sorter, Gradient, Patterns, Physics,
 Particles, GlitchMosh) is recoverable at tag `archive/pre-scope-reduction-2026-06-04`.
 
+**Color Lab roadmap — Polish → Presets → Log.** **Phase A (panel polish) SHIPPED 2026-06-10**:
+display-space grade defaults (no longer "too intense") + Reset button + hidden from the Effects
+menu (panel-only); crisp HiDPI curve editor with a gradient colour-space backdrop; single big
+color wheel with Lift/Gamma/Gain tabs + bold DaVinci hue ring; live preview only UPDATES an
+existing grade (the Apply Color button is the only thing that creates the layer/effect). **Next:
+Phase B — presets** (the 16 `factory-presets.js` colorlab looks are tuned for the old linear
+pipeline → broken/IG-filter-ish; re-author for display space, user to supply Envato/.cube refs),
+then **Phase C — log / input colour management** (camera log decode + `.cube` loader). Resume
+notes live in memory `color-native-progress`.
+
 ## "Where is…?" quick reference
 
 | You want… | It's here |
@@ -22,13 +32,14 @@ Particles, GlitchMosh) is recoverable at tag `archive/pre-scope-reduction-2026-0
 | The **compiled Deep Glow plugin** (what AE loads) | `glow-native/build-ae/DeepGlowGPU.aex` |
 | The **Deep Glow engine source** (the math) | `glow-native/core/` (CPU) + `glow-native/cuda/` (GPU) |
 | The **Deep Glow AE SDK shell** (builds the `.aex`) | `glow-native/ae/` |
-| The **Color Lab panel UI** (3-way wheels + primaries) | `js/plugins/colorlab/ui.js` |
+| The **Color Lab panel UI** (single wheel + Lift/Gamma/Gain tabs + hue ring, primaries, curve editor) | `js/plugins/colorlab/ui.js` |
 | The **Color Lab ExtendScript** (drives the native effect) | `jsx/colorlab.jsx` |
 | The **compiled Color Lab plugin** | `color-native/build-ae/ColorLab.aex` |
 | The **Color Lab engine source** (the math) | `color-native/core/` (CPU) + `color-native/cuda/` (GPU) |
 | The **shared panel design system** | `docs/design/DESIGN_LANGUAGE.md` |
 | **Color Lab spec + phase plans (P1–P5)** | `docs/superpowers/specs/2026-06-09-color-tool-native-design.md` · `docs/superpowers/plans/2026-06-09-color-tool-P*.md` |
 | **▶ FINAL PHASE plan** (ship-ready roadmap, F0–F7) | `docs/superpowers/plans/2026-06-09-final-phase-ship-ready.md` |
+| **Color Lab panel polish (Phase A — SHIPPED)** spec + plan | `docs/superpowers/specs/2026-06-10-colorlab-panel-polish-design.md` · `docs/superpowers/plans/2026-06-10-colorlab-panel-polish.md` |
 | **Deep Glow status + plans + distribution** | `docs/handoffs/2026-06-08-deepglow-native-cep-handoff.md` |
 | **Engine tests / CPU-GPU parity** | `glow-native/tests/` · `glow-native/cuda/glow_parity.cpp` · `color-native/tests/` · `color-native/cuda/color_parity.cpp` |
 | The (superseded) **Electron app** | `electron-app/` |
