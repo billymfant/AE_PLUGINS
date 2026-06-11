@@ -2,10 +2,12 @@
 #include <cmath>
 
 // Shared host/device marker (mirrors color's CL_HD). nvcc defines __CUDACC__.
+#ifndef DS_HD
 #ifdef __CUDACC__
 #define DS_HD __host__ __device__
 #else
 #define DS_HD
+#endif
 #endif
 
 namespace distort {
@@ -67,6 +69,7 @@ DS_HD inline float ds_ease(int mode,float t){
         case EASE_OUT:   return 1.f-(1.f-t)*(1.f-t);
         case EASE_INOUT: return t*t*(3.f-2.f*t);
         case EASE_SINE:  return 0.5f-0.5f*cosf(3.14159265f*t);
+        // standard Penner expo-in: ~0.001 discontinuity at t=0, imperceptible for warp
         case EASE_EXP:   return t<=0.f?0.f:(t>=1.f?1.f:powf(2.f,10.f*(t-1.f)));
         default:         return t;
     }

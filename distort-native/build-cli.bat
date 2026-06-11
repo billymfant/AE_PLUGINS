@@ -14,8 +14,13 @@ pushd "%~dp0"
 if not exist build mkdir build
 echo Building distort_tests.exe ...
 cl /nologo /EHsc /O2 /std:c++17 /I core tests\distort_tests.cpp core\distort_core.cpp /Fo:build\ /Fe:build\distort_tests.exe || (popd & exit /b 1)
+if not exist cli\distort_cli.cpp goto :skipcli
 echo Building distort_cli.exe ...
 cl /nologo /EHsc /O2 /std:c++17 /I core /I cli cli\distort_cli.cpp core\distort_core.cpp /Fo:build\ /Fe:build\distort_cli.exe || (popd & exit /b 1)
+goto :built
+:skipcli
+echo Skipping distort_cli.exe ^(cli\distort_cli.cpp not present yet - added in Task 6^)
+:built
 echo OK
 popd
 endlocal
