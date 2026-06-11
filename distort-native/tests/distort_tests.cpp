@@ -42,9 +42,39 @@ static void test_map_in_range(){
     }
 }
 
+static void test_ease_endpoints_monotonic(){
+    int modes[6]={EASE_LINEAR,EASE_IN,EASE_OUT,EASE_INOUT,EASE_SINE,EASE_EXP};
+    for(int i=0;i<6;i++){
+        NEAR(ds_ease(modes[i],0.f),0.f,1e-4f);
+        NEAR(ds_ease(modes[i],1.f),1.f,1e-4f);
+        float prev=-1.f;
+        for(float t=0.f;t<=1.f;t+=0.05f){ float e=ds_ease(modes[i],t); CHECK(e>=prev-1e-4f); prev=e; }
+    }
+}
+static void test_flow_static_is_one(){
+    Params P; P.flowSpeed=0.f;                     // static
+    NEAR(flowScalar(P, 3.7f), 1.f, 1e-6f);
+}
+static void test_flow_weight_dir(){
+    Params P;
+    P.flowDir=FLOW_FORWARD; NEAR(flowWeight(P,0.3f,0.2f), 1.f, 1e-6f);
+    P.flowDir=FLOW_REVERSE; NEAR(flowWeight(P,0.3f,0.2f),-1.f, 1e-6f);
+    P.flowDir=FLOW_CENTER_OUT; NEAR(flowWeight(P,0.f,0.f), -1.f, 1e-4f); // center
+    P.flowDir=FLOW_EDGES_IN;   NEAR(flowWeight(P,0.f,0.f),  1.f, 1e-4f);
+}
+static void test_flow_jitter_deterministic_and_bounded(){
+    Params P; P.jitter=0.5f; P.jitterSeed=7;
+    float a=flowJitter(P,10,20), b=flowJitter(P,10,20);
+    NEAR(a,b,0.f);                                  // same input -> same output
+    CHECK(a>=-0.5f && a<=0.5f);
+    NEAR(flowJitter(P,10,20)*0.f,0.f,0.f);          // (no-op, keeps a referenced)
+    Params Q; Q.jitter=0.f; NEAR(flowJitter(Q,10,20),0.f,0.f);
+}
+
 int main(){
     test_clamp_frac();
     test_map_gradient_center_zero(); test_map_gradient_uniform_when_spacing_zero(); test_map_wave_phase_zero_center(); test_map_in_range();
+    test_ease_endpoints_monotonic(); test_flow_static_is_one(); test_flow_weight_dir(); test_flow_jitter_deterministic_and_bounded();
     if (g_fail==0) printf("ALL PASS\n"); else printf("%d FAILED\n", g_fail);
     return g_fail==0 ? 0 : 1;
 }
