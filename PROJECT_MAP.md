@@ -27,6 +27,9 @@ notes live in memory `color-native-progress`.
 |---|---|
 | The **Distortions panel UI** | `js/plugins/distortions/ui.js` |
 | The **Distortions ExtendScript** (stacks AE built-ins: Optics Compensation, Mesh Warp, Twirl, Wave Warp, Bulge — no native `.aex`) | `jsx/distortions.jsx` |
+| The **native Distort/Flow engine source** (map-driven warp math) | `distort-native/core/` (CPU; D2 CUDA later) |
+| The **compiled Distort Flow plugin** (`.aex`, spatial warp on footage) | `distort-native/build-ae/DistortFlow.aex` (D3a CPU) |
+| The **Distort Flow AE SDK shell** (builds the `.aex`) | `distort-native/ae/` — match-name `DKVB DistortFlow` |
 | The **Deep Glow panel UI** (the interactive widget) | `js/plugins/glow/ui.js` |
 | The **Deep Glow ExtendScript** (applies the native effect) | `jsx/glow.jsx` |
 | The **compiled Deep Glow plugin** (what AE loads) | `glow-native/build-ae/DeepGlowGPU.aex` |
