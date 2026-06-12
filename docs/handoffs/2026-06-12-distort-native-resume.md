@@ -20,18 +20,23 @@ cmd /c '"...\VC\Auxiliary\Build\vcvars64.bat" && msbuild distort-native\ae\Disto
 `C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\Plug-ins\` + relaunch AE
 (dev shell is non-admin → user does this via Explorer/elevated PS).
 
-## NEXT SESSION — 3 open items (brainstorm paused mid-flow; design NOT written; no impl started)
-1. **PRIORITY BUG — effect drifts footage + transparent gaps** (`test/dist_issue1,2.png`).
-   Cause: gradient `frac()` sawtooth = non-zero-mean → net push + tears; edges smear/transparent.
-   **Decision: "distort in place, fill whole canvas"** — zero-mean displacement (no translation),
-   never reveal transparency, on footage AND adjustment layers. Fix in `core/distort_core.cpp`
-   `warp()`/`mapValue` (+ maybe expand PreRender input rect by `amount`; default edge=mirror).
-2. **Animate the rows — UNDECIDED.** Re-ask: spatial Rows/Slats (easy) vs time-slice slit-scan
-   (D4 temporal, hard) vs scroll bands via flow.
-3. **Mosaic = "blocky mosaic displacement"** — quantize warp sample coord/field to a block grid
-   (block-size param) → chunky shuffle; animates via existing flow. New map/mode on the engine.
+## DONE 2026-06-12 (commit `7b8e8e9`) — canvas fix + mosaic SHIPPED in the .aex
+1. ✅ **Footage-drift / transparent-gaps fix.** Gradient/Radial now use a continuous zero-mean
+   TRIANGLE field (`ds_tri` in `distort_params.h`) instead of frac() sawtooth → no tear, no net
+   translation (distorts in place). `.aex` defaults changed to **Map=Wave + Edge=Mirror** so it
+   fills the whole canvas out of the box. (Did NOT do PreRender input-rect expansion — risky
+   without AE to test; mirror-edge + zero-mean covers it for opaque footage. Revisit only if
+   the user still sees edge gaps.)
+3. ✅ **Mosaic = blocky displacement.** New `mosaicBlock` param + `Mosaic Block (px)` slider
+   (0..200); snaps each block to one sampled tile that displaces as a unit. `distort_tests`
+   updated + ALL PASS. `DistortFlow.aex` rebuilt (72 KB).
+   ⚠️ Both need the user to **reinstall the rebuilt .aex** (admin copy + relaunch AE) + eyeball.
 
-**Flow:** finish brainstorm (#2) → spec → plan → implement, leading with #1 (whole-canvas fix).
+## STILL OPEN
+2. **Animate the rows — UNDECIDED.** Re-ask next session: spatial Rows/Slats mode (easy,
+   single-frame) vs time-slice slit-scan (D4 temporal, hard) vs scroll bands via flow. Once
+   decided → spec → plan → implement.
+- Later: D3b CEP panel wiring · D2 GPU · D4 temporal · refract lens mode.
 
 ## Key paths
 - Engine math: `distort-native/core/` (`distort_core.cpp warp()`, `distort_map.h mapValue`)
