@@ -32,11 +32,34 @@ cmd /c '"...\VC\Auxiliary\Build\vcvars64.bat" && msbuild distort-native\ae\Disto
    updated + ALL PASS. `DistortFlow.aex` rebuilt (72 KB).
    ⚠️ Both need the user to **reinstall the rebuilt .aex** (admin copy + relaunch AE) + eyeball.
 
-## STILL OPEN
-2. **Animate the rows — UNDECIDED.** Re-ask next session: spatial Rows/Slats mode (easy,
-   single-frame) vs time-slice slit-scan (D4 temporal, hard) vs scroll bands via flow. Once
-   decided → spec → plan → implement.
-- Later: D3b CEP panel wiring · D2 GPU · D4 temporal · refract lens mode.
+## ⚠️ 2026-06-12 (session 2) — the "gaps still there" screenshots were a STALE INSTALL, not a code bug
+User dropped `test/dist_issue1.png` / `dist_issue2.png` (transparent smear-comb at the bottom +
+footage shifted up) thinking the canvas fix failed. **It did not.** Timeline evidence settled it:
+- Installed `.aex` = **68096 bytes @ 11:14** = the PRE-fix D3a build (EDGE_CLAMP + frac() sawtooth).
+- Screenshots taken **11:22–11:23** → against that stale 68 KB build.
+- Canvas fix (`7b8e8e9`) committed **13:15**, rebuilt to **72192 bytes @ 13:14** — **never installed.**
+The smear-comb is the EDGE_CLAMP signature; the shift is the sawtooth (non-zero-mean) signature —
+both already fixed by Map=Wave + Edge=Mirror + zero-mean triangle. With EDGE_MIRROR, `sampleBilinear`
+cannot return transparency on opaque footage, so the fix covers the canvas. **No new code needed.**
+
+**ACTION FOR USER (do this first on the other computer):**
+1. Admin-copy the freshly rebuilt `distort-native/build-ae/DistortFlow.aex` (72 KB, now COMMITTED)
+   over the stale one in `C:\Program Files\Adobe\Adobe After Effects 2026\Support Files\Plug-ins\`.
+2. Relaunch AE. **Apply to a FRESH effect instance** (delete the old Distort Flow + re-add) — AE
+   keeps OLD stored param values (Gradient/Clamp) on existing instances, so an old instance will
+   still look broken even with the new .aex. Confirm Map=Wave, Edge=Mirror on the new instance.
+3. Eyeball: gaps/drift should be gone. If gaps STILL appear ONLY where footage doesn't fill the
+   comp (footage has its own alpha/bounds), that's inherent — mirror can't invent content beyond
+   the layer; the PreRender input-rect expansion wouldn't help either (no footage out there).
+
+## STILL OPEN — animate-rows: DECIDED = Spatial Rows/Slats
+User said "whatever is optimal"; decision = **Spatial Rows/Slats** mode (N horizontal bands, animate
+per-band offsets via existing flow). Rationale: single-frame, builds on the current engine, and
+matches the woven-slat SYSTMS look (see `docs/reference/timeslice-target-look.png`). True time-slice
+slit-scan (each row = a different TIME) stays as its own later **D4 temporal** phase (hard:
+multi-frame PF_CHECKOUT_LAYER). **Next session: brainstorm → spec → plan → implement Spatial Rows.**
+GPU (D2 CUDA) confirmed on roadmap — core/ is written portably to mirror into distort_cuda.cu later.
+- Later: D3b CEP panel wiring · D2 GPU/CUDA · D4 temporal slit-scan · refract lens mode.
 
 ## Key paths
 - Engine math: `distort-native/core/` (`distort_core.cpp warp()`, `distort_map.h mapValue`)
