@@ -61,7 +61,7 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
     PF_ParamDef def;
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("Map Type", 4, distort::MAP_GRADIENT, DF_MAP_CHOICES, DFP_MAPTYPE);
+    PF_ADD_POPUP("Map Type", 4, distort::MAP_WAVE, DF_MAP_CHOICES, DFP_MAPTYPE);  // default Wave: smooth, in-place
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Angle", -180, 180, -180, 180, 0, PF_Precision_INTEGER, 0, 0, DFP_ANGLE);
     AEFX_CLR_STRUCT(def);
@@ -100,9 +100,11 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
     PF_ADD_FLOAT_SLIDERX("Phase", 0, 1, 0, 1, 0, PF_Precision_THOUSANDTHS, 0, 0, DFP_PHASE);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("Edges", 4, distort::EDGE_CLAMP, DF_EDGE_CHOICES, DFP_EDGE);
+    PF_ADD_POPUP("Edges", 4, distort::EDGE_MIRROR, DF_EDGE_CHOICES, DFP_EDGE);  // default Mirror: fills the canvas
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Opacity", 0, 100, 0, 100, 100, PF_Precision_INTEGER, 0, 0, DFP_OPACITY);
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Mosaic Block (px)", 0, 200, 0, 200, 0, PF_Precision_INTEGER, 0, 0, DFP_MOSAIC);
 
     out_data->num_params = DF_NUM_PARAMS;
     return err;
@@ -134,6 +136,7 @@ ReadParams(PF_ParamDef* params[])
     p.phase        = (float)params[DFP_PHASE]->u.fs_d.value;
     p.edgeMode     = (int)params[DFP_EDGE]->u.pd.value;           // 1..4 == EDGE_*
     p.opacity      = (float)(params[DFP_OPACITY]->u.fs_d.value / 100.0);
+    p.mosaicBlock  = (float)params[DFP_MOSAIC]->u.fs_d.value;
     return p;
 }
 

@@ -47,6 +47,7 @@ enum {
     /* output */
     DFP_EDGE,         /* popup Clamp|Wrap|Mirror|Transparent (1..4 == EDGE_*)    */
     DFP_OPACITY,      /* %     0..100      default 100 (-> 0..1)                 */
+    DFP_MOSAIC,       /* px    0..200      default 0   (>=1 => blocky mosaic)    */
     DF_NUM_PARAMS     /* keep last */
 };
 

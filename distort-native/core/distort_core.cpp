@@ -56,20 +56,27 @@ static void warpBand(const Image& src, Image& dst, const Params& P, const Image*
                      float ca, float sa, float modul, int y0, int y1){
     for(int y=y0;y<y1;y++){
         for(int x=0;x<src.w;x++){
-            float u=((x+0.5f)/src.w)*2.f-1.f;
-            float v=((y+0.5f)/src.h)*2.f-1.f;
+            // mosaic: snap the sample anchor to block centers so each block is a solid
+            // tile that displaces as one unit ("blocky" warp). Off when mosaicBlock<1.
+            float ax=(float)x, ay=(float)y;
+            if (P.mosaicBlock>=1.f){
+                ax=(floorf((float)x/P.mosaicBlock)+0.5f)*P.mosaicBlock;
+                ay=(floorf((float)y/P.mosaicBlock)+0.5f)*P.mosaicBlock;
+            }
+            float u=((ax+0.5f)/src.w)*2.f-1.f;
+            float v=((ay+0.5f)/src.h)*2.f-1.f;
             // base field: generator, or sampled layer luma/channel for MAP_LAYER
             float field;
             if (P.mapType==MAP_LAYER && mapLayer){
-                float mx=((x+0.5f)/src.w)*mapLayer->w-0.5f;
-                float my=((y+0.5f)/src.h)*mapLayer->h-0.5f;
+                float mx=((ax+0.5f)/src.w)*mapLayer->w-0.5f;
+                float my=((ay+0.5f)/src.h)*mapLayer->h-0.5f;
                 float m[4]; sampleBilinear(*mapLayer,mx,my,EDGE_CLAMP,m);
                 float val = (P.mapChannel==1)?m[0]:(P.mapChannel==2)?m[1]:(P.mapChannel==3)?m[2]:lumaRec709(m[0],m[1],m[2]);
                 field = ds_remap(ds_clamp(2.f*val-1.f,-1.f,1.f), P.mapContrast);
             } else {
                 field = mapValue(P,u,v);
             }
-            float ff = ds_clamp(field*flowWeight(P,u,v)*modul + flowJitter(P,x,y), -1.f, 1.f);
+            float ff = ds_clamp(field*flowWeight(P,u,v)*modul + flowJitter(P,(int)ax,(int)ay), -1.f, 1.f);
             // displacement vector
             float dx,dy;
             if (P.displaceMode==DISP_PUSH_PULL){
@@ -79,7 +86,7 @@ static void warpBand(const Image& src, Image& dst, const Params& P, const Image*
             } else {
                 dx=ca*ff*P.amount; dy=sa*ff*P.amount;
             }
-            float sm[4]; sampleBilinear(src, x+dx, y+dy, P.edgeMode, sm);
+            float sm[4]; sampleBilinear(src, ax+dx, ay+dy, P.edgeMode, sm);
             float* o=dst.at(x,y);
             if (P.opacity>=1.f){ o[0]=sm[0];o[1]=sm[1];o[2]=sm[2];o[3]=sm[3]; }
             else { const float* s0=src.at(x,y); for(int k=0;k<4;k++) o[k]=s0[k]+(sm[k]-s0[k])*P.opacity; }

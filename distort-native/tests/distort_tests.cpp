@@ -16,15 +16,15 @@ static void test_clamp_frac(){
     NEAR(ds_frac(2.25f), 0.25f, 1e-6f);
 }
 
-static void test_map_gradient_center_zero(){
+static void test_map_gradient_center(){
     Params P; P.mapType=MAP_GRADIENT; P.spacing=1.f; P.angleDeg=0.f;
-    // center (u=0): proj01=0.5, spacing 1 -> frac(0.5)=0.5 -> field 0
-    NEAR(mapValue(P, 0.f, 0.f), 0.f, 1e-5f);
+    // center (u=0): proj01=0.5, triangle(0.5) = -1 (continuous ramp, no tear)
+    NEAR(mapValue(P, 0.f, 0.f), -1.f, 1e-5f);
 }
 static void test_map_gradient_uniform_when_spacing_zero(){
     Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f;
-    NEAR(mapValue(P,-0.7f, 0.3f), -1.f, 1e-5f);   // frac(0)=0 -> 2*0-1 = -1 everywhere
-    NEAR(mapValue(P, 0.6f,-0.2f), -1.f, 1e-5f);
+    NEAR(mapValue(P,-0.7f, 0.3f), 1.f, 1e-5f);   // tri(0)=+1 uniform everywhere
+    NEAR(mapValue(P, 0.6f,-0.2f), 1.f, 1e-5f);
 }
 static void test_map_wave_phase_zero_center(){
     Params P; P.mapType=MAP_WAVE; P.wavePhase=0.f; P.waveFreq=1.f; P.angleDeg=0.f;
@@ -111,14 +111,23 @@ static void test_warp_identity_when_amount_zero(){
     for(size_t i=0;i<src.px.size();++i) NEAR(dst.px[i],src.px[i],1e-4f);
 }
 static void test_warp_known_shift(){
-    // gradient spacing=0 -> field=-1 everywhere; fixed dir angle 0, amount 2
-    // dst(x,y) samples src at x + cos0*(-1)*2 = x-2  => dst red == src red at x-2 (clamped)
+    // gradient spacing=0 -> tri(0)=+1 field everywhere; fixed dir angle 0, amount 2
+    // dst(x,y) samples src at x + cos0*(+1)*2 = x+2  => dst red == src red at x+2 (clamped)
     Image src=ramp_x(8,1), dst(8,1);
     Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.displaceMode=DISP_FIXED;
     P.angleDeg=0.f; P.amount=2.f; P.edgeMode=EDGE_CLAMP;
     warp(src,dst,P,nullptr,0.f);
-    NEAR(dst.at(5,0)[0], 3.f, 1e-4f);                 // src x=3
-    NEAR(dst.at(1,0)[0], 0.f, 1e-4f);                 // x-2=-1 -> clamp to 0
+    NEAR(dst.at(3,0)[0], 5.f, 1e-4f);                 // src x=5
+    NEAR(dst.at(6,0)[0], 7.f, 1e-4f);                 // x+2=8 -> clamp to 7
+}
+static void test_warp_mosaic_blocks(){
+    // mosaicBlock=4, amount 0 -> no displacement; each block samples its own center.
+    // block [0,4) center ax=2 -> red 2 across it; block [4,8) center ax=6 -> red 6.
+    Image src=ramp_x(8,1), dst(8,1);
+    Params P; P.mapType=MAP_GRADIENT; P.amount=0.f; P.mosaicBlock=4.f;
+    warp(src,dst,P,nullptr,0.f);
+    NEAR(dst.at(1,0)[0], 2.f, 1e-4f);
+    NEAR(dst.at(5,0)[0], 6.f, 1e-4f);
 }
 static void test_warp_opacity_zero_is_source(){
     Image src=ramp_x(8,2), dst(8,2);
@@ -139,10 +148,11 @@ static void test_warp_layer_map_luma(){
 
 int main(){
     test_clamp_frac();
-    test_map_gradient_center_zero(); test_map_gradient_uniform_when_spacing_zero(); test_map_wave_phase_zero_center(); test_map_in_range();
+    test_map_gradient_center(); test_map_gradient_uniform_when_spacing_zero(); test_map_wave_phase_zero_center(); test_map_in_range();
     test_ease_endpoints_monotonic(); test_flow_static_is_one(); test_flow_weight_dir(); test_flow_jitter_deterministic_and_bounded();
     test_bilinear_integer_exact(); test_bilinear_midpoint_average(); test_edge_clamp_outside(); test_edge_transparent_outside();
     test_warp_identity_when_amount_zero(); test_warp_known_shift(); test_warp_opacity_zero_is_source(); test_warp_layer_map_luma();
+    test_warp_mosaic_blocks();
     if (g_fail==0) printf("ALL PASS\n"); else printf("%d FAILED\n", g_fail);
     return g_fail==0 ? 0 : 1;
 }

@@ -31,7 +31,7 @@ DS_HD inline float mapValue(const Params& P,float u,float v){
     float f;
     if (P.mapType==MAP_RADIAL){
         float rr=sqrtf(u*u+v*v)/SQRT2;             // 0..1
-        f=2.f*ds_frac(rr*P.spacing)-1.f;
+        f=ds_tri(rr*P.spacing);                    // continuous rings (no tear)
     } else if (P.mapType==MAP_WAVE){
         float proj=(u*c+v*s);
         f=sinf(proj*P.waveFreq*PI + P.wavePhase);
@@ -41,7 +41,7 @@ DS_HD inline float mapValue(const Params& P,float u,float v){
         return 0.f;                                // caller substitutes layer luma
     } else { // MAP_GRADIENT
         float proj01=0.5f+0.5f*(u*c+v*s)/SQRT2;    // 0..1
-        f=2.f*ds_frac(proj01*P.spacing)-1.f;
+        f=ds_tri(proj01*P.spacing);                // continuous ramp/zigzag (no tear)
     }
     return ds_remap(ds_clamp(f,-1.f,1.f), P.mapContrast);
 }

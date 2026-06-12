@@ -46,10 +46,14 @@ struct Params {
     // output
     int   edgeMode    = EDGE_CLAMP;
     float opacity     = 1.f;     // 0..1 blend warped over source
+    float mosaicBlock = 0.f;     // px; >=1 quantizes the warp into solid blocks (mosaic shuffle)
 };
 
 DS_HD inline float ds_clamp(float v,float lo,float hi){ return v<lo?lo:(v>hi?hi:v); }
 DS_HD inline float ds_frac(float v){ return v - floorf(v); }
+// Continuous zero-mean triangle wave in [-1,1], period 1 (no sawtooth discontinuity,
+// so it warps "in place" without the tearing a frac() ramp produces).
+DS_HD inline float ds_tri(float t){ return 2.f*fabsf(2.f*ds_frac(t)-1.f)-1.f; }
 DS_HD inline float lumaRec709(float r,float g,float b){ return 0.2126f*r+0.7152f*g+0.0722f*b; }
 
 // signed contrast remap: steepen (c>0) or flatten (c<0) a field in [-1,1] around 0.
