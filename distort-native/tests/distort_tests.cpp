@@ -99,11 +99,50 @@ static void test_edge_transparent_outside(){
     NEAR(o[0], 0.f, 1e-5f); NEAR(o[3], 0.f, 1e-5f);   // fully outside -> 0000
 }
 
+static Image ramp_x(int w,int h){                     // red channel = x index
+    Image im(w,h);
+    for(int y=0;y<h;y++) for(int x=0;x<w;x++){ float* p=im.at(x,y); p[0]=(float)x; p[1]=0;p[2]=0;p[3]=1.f; }
+    return im;
+}
+static void test_warp_identity_when_amount_zero(){
+    Image src=ramp_x(8,4), dst(8,4);
+    Params P; P.amount=0.f;
+    warp(src,dst,P,nullptr,0.f);
+    for(size_t i=0;i<src.px.size();++i) NEAR(dst.px[i],src.px[i],1e-4f);
+}
+static void test_warp_known_shift(){
+    // gradient spacing=0 -> field=-1 everywhere; fixed dir angle 0, amount 2
+    // dst(x,y) samples src at x + cos0*(-1)*2 = x-2  => dst red == src red at x-2 (clamped)
+    Image src=ramp_x(8,1), dst(8,1);
+    Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.displaceMode=DISP_FIXED;
+    P.angleDeg=0.f; P.amount=2.f; P.edgeMode=EDGE_CLAMP;
+    warp(src,dst,P,nullptr,0.f);
+    NEAR(dst.at(5,0)[0], 3.f, 1e-4f);                 // src x=3
+    NEAR(dst.at(1,0)[0], 0.f, 1e-4f);                 // x-2=-1 -> clamp to 0
+}
+static void test_warp_opacity_zero_is_source(){
+    Image src=ramp_x(8,2), dst(8,2);
+    Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.amount=4.f; P.opacity=0.f;
+    warp(src,dst,P,nullptr,0.f);
+    for(size_t i=0;i<src.px.size();++i) NEAR(dst.px[i],src.px[i],1e-4f);
+}
+static void test_warp_layer_map_luma(){
+    // MAP_LAYER: a white map -> luma 1 -> field 2*1-1=+1; fixed angle0 amount2
+    // dst samples src at x + 1*2 = x+2
+    Image src=ramp_x(8,1), dst(8,1);
+    Image map=solid_rgba(8,1, 1.f,1.f,1.f, 1.f);
+    Params P; P.mapType=MAP_LAYER; P.mapChannel=0; P.displaceMode=DISP_FIXED;
+    P.angleDeg=0.f; P.amount=2.f; P.edgeMode=EDGE_CLAMP;
+    warp(src,dst,P,&map,0.f);
+    NEAR(dst.at(3,0)[0], 5.f, 1e-4f);                 // src x=5
+}
+
 int main(){
     test_clamp_frac();
     test_map_gradient_center_zero(); test_map_gradient_uniform_when_spacing_zero(); test_map_wave_phase_zero_center(); test_map_in_range();
     test_ease_endpoints_monotonic(); test_flow_static_is_one(); test_flow_weight_dir(); test_flow_jitter_deterministic_and_bounded();
     test_bilinear_integer_exact(); test_bilinear_midpoint_average(); test_edge_clamp_outside(); test_edge_transparent_outside();
+    test_warp_identity_when_amount_zero(); test_warp_known_shift(); test_warp_opacity_zero_is_source(); test_warp_layer_map_luma();
     if (g_fail==0) printf("ALL PASS\n"); else printf("%d FAILED\n", g_fail);
     return g_fail==0 ? 0 : 1;
 }
