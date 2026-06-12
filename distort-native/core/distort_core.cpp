@@ -2,6 +2,9 @@
 #include "distort_map.h"
 #include "distort_flow.h"
 #include <cmath>
+#include <thread>
+#include <vector>
+#include <algorithm>
 
 namespace distort {
 
@@ -47,12 +50,11 @@ void sampleBilinear(const Image& im,float fx,float fy,int edge,float out[4]){
     tap(im,x0+1,y0+1,edge,tx*ty,        out);
 }
 
-void warp(const Image& src, Image& dst, const Params& P, const Image* mapLayer, float time){
-    const float PI=3.14159265f;
-    if (dst.w!=src.w || dst.h!=src.h) dst = Image(src.w, src.h);
-    float th=P.angleDeg*PI/180.f, ca=cosf(th), sa=sinf(th);
-    float modul=flowScalar(P,time);
-    for(int y=0;y<src.h;y++){
+// One horizontal band [y0,y1) of the warp. Pure per-pixel work, no shared writes
+// outside dst's own rows, so bands run safely on separate threads.
+static void warpBand(const Image& src, Image& dst, const Params& P, const Image* mapLayer,
+                     float ca, float sa, float modul, int y0, int y1){
+    for(int y=y0;y<y1;y++){
         for(int x=0;x<src.w;x++){
             float u=((x+0.5f)/src.w)*2.f-1.f;
             float v=((y+0.5f)/src.h)*2.f-1.f;
@@ -83,6 +85,38 @@ void warp(const Image& src, Image& dst, const Params& P, const Image* mapLayer, 
             else { const float* s0=src.at(x,y); for(int k=0;k<4;k++) o[k]=s0[k]+(sm[k]-s0[k])*P.opacity; }
         }
     }
+}
+
+// Spatial warp, multithreaded across row-bands. Each band is independent (reads
+// src anywhere, writes only its own dst rows), so this is a clean parallel-for.
+// Small frames run inline to avoid thread-spawn overhead (keeps unit tests fast).
+void warp(const Image& src, Image& dst, const Params& P, const Image* mapLayer, float time){
+    const float PI=3.14159265f;
+    if (dst.w!=src.w || dst.h!=src.h) dst = Image(src.w, src.h);
+    float th=P.angleDeg*PI/180.f, ca=cosf(th), sa=sinf(th);
+    float modul=flowScalar(P,time);
+    if (src.h<=0 || src.w<=0) return;
+
+    unsigned hw = std::thread::hardware_concurrency(); if (hw==0) hw=4;
+    int nThreads = (int)hw;
+    // Don't spawn more threads than ~one per 16 rows, and never for tiny images.
+    int maxByRows = src.h / 16; if (maxByRows < 1) maxByRows = 1;
+    if (nThreads > maxByRows) nThreads = maxByRows;
+
+    if (nThreads <= 1){
+        warpBand(src, dst, P, mapLayer, ca, sa, modul, 0, src.h);
+        return;
+    }
+    std::vector<std::thread> pool;
+    pool.reserve(nThreads);
+    int band = (src.h + nThreads - 1) / nThreads;   // ceil division
+    for(int t=0; t<nThreads; ++t){
+        int y0 = t*band, y1 = std::min(src.h, y0+band);
+        if (y0 >= y1) break;
+        pool.emplace_back(warpBand, std::cref(src), std::ref(dst), std::cref(P),
+                          mapLayer, ca, sa, modul, y0, y1);
+    }
+    for(auto& th2 : pool) th2.join();
 }
 
 } // namespace distort
