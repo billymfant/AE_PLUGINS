@@ -1,6 +1,6 @@
 # Distort Native — Resume Handoff (2026-06-12)
 
-**Branch:** `feat/distort-native` · working tree clean at commit `a3500f4`.
+**Branch:** `feat/distort-native` (pushed to origin) · tip ≈ `0ce2e37` (canvas-fix + mosaic done).
 **Read first:** memory `distort-native-d3a-verified` + `distort-native-plan`. Specs/plans below.
 
 ## Status — what works
