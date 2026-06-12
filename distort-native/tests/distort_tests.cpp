@@ -71,10 +71,39 @@ static void test_flow_jitter_deterministic_and_bounded(){
     Params Q; Q.jitter=0.f; NEAR(flowJitter(Q,10,20),0.f,0.f);
 }
 
+static Image solid_rgba(int w,int h,float r,float g,float b,float a){
+    Image im(w,h);
+    for(int i=0;i<w*h;++i){ float* p=&im.px[i*4]; p[0]=r;p[1]=g;p[2]=b;p[3]=a; }
+    return im;
+}
+static void test_bilinear_integer_exact(){
+    Image im(2,1);
+    im.at(0,0)[0]=0.2f; im.at(1,0)[0]=0.8f;
+    float o[4]; sampleBilinear(im, 1.f, 0.f, EDGE_CLAMP, o);
+    NEAR(o[0], 0.8f, 1e-5f);
+}
+static void test_bilinear_midpoint_average(){
+    Image im(2,1);
+    im.at(0,0)[0]=0.2f; im.at(1,0)[0]=0.8f;
+    float o[4]; sampleBilinear(im, 0.5f, 0.f, EDGE_CLAMP, o);
+    NEAR(o[0], 0.5f, 1e-5f);                          // (0.2+0.8)/2
+}
+static void test_edge_clamp_outside(){
+    Image im = solid_rgba(2,2, 0.3f,0,0, 1.f);
+    float o[4]; sampleBilinear(im, -5.f, -5.f, EDGE_CLAMP, o);
+    NEAR(o[0], 0.3f, 1e-5f);                          // clamped to (0,0)
+}
+static void test_edge_transparent_outside(){
+    Image im = solid_rgba(2,2, 0.3f,0,0, 1.f);
+    float o[4]; sampleBilinear(im, -5.f, 0.f, EDGE_TRANSPARENT, o);
+    NEAR(o[0], 0.f, 1e-5f); NEAR(o[3], 0.f, 1e-5f);   // fully outside -> 0000
+}
+
 int main(){
     test_clamp_frac();
     test_map_gradient_center_zero(); test_map_gradient_uniform_when_spacing_zero(); test_map_wave_phase_zero_center(); test_map_in_range();
     test_ease_endpoints_monotonic(); test_flow_static_is_one(); test_flow_weight_dir(); test_flow_jitter_deterministic_and_bounded();
+    test_bilinear_integer_exact(); test_bilinear_midpoint_average(); test_edge_clamp_outside(); test_edge_transparent_outside();
     if (g_fail==0) printf("ALL PASS\n"); else printf("%d FAILED\n", g_fail);
     return g_fail==0 ? 0 : 1;
 }

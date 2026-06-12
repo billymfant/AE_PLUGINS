@@ -146,3 +146,33 @@ with safe defaults, so an older `.aex` still applies what it understands (same g
   preview is a later, separate idea).
 - Mesh/handle-based manual warping (this engine is map-driven, not handle-driven).
 - Changes to the existing built-in distortions.
+
+---
+
+## Addendum 2026-06-12 — "Refract" lens mode (Brik "Refract Me" reference)
+
+Second reference supplied by the user: Brik's *Refract Me* video-lens tool
+(`brik.space/ToolViewer?slug=remix-of-refract-me-video-lens-mo1o8hwu`). Page is a
+client-rendered SPA (no extractable source); analysis is from the user's screenshot.
+
+**What it is:** a glassy, organic **lens-blob** floating over the footage that **refracts
+and magnifies** the pixels behind it, with a **woven criss-cross ripple** across the lens
+interior and stronger bending + faint fringing at the rim. Reads as light refracting
+through irregular glass.
+
+**This is NOT a new engine** — it decomposes cleanly onto the existing map-driven warp as a
+new *warp mode* + map options. Mapping:
+
+| Reference trait | distort-native primitive | New work |
+|---|---|---|
+| Organic blob lens boundary | extend `MAP_RADIAL` → an **SDF/metaball blob** field (lens mask + smooth falloff) | new map sub-type |
+| Magnify + bend rays inward | new **`DISP_REFRACT`** mode: displace along map gradient ∇field, scaled by an IOR/strength param (reuses `mapGradientDir`) | new displace mode |
+| Woven criss-cross ripple | `MAP_WAVE` evaluated on **both axes** (X-wave × Y-wave interfering) | `crossWave` flag on wave map |
+| Rim-strong / center-calm | existing field falloff via `mapContrast` / flow weight | none (reuse) |
+| Edge color fringing | **chromatic split**: sample R/G/B at slightly offset displacements | optional, later |
+
+**Phasing:** the blob map + `DISP_REFRACT` + cross-wave are **spatial** and therefore belong
+to the **D3 AE-shell phase** (or a small D3.5), built on the D1 CPU core (bilinear sampler +
+warp dispatch). Chromatic split is a polish item (D5). Nothing here changes D1/D2 scope —
+D1 stays gradient/radial/wave/noise/layer as planned; refract is additive once the core
+sampler and warp dispatch exist. Exact control names/ranges TBD pending legible Brik labels.
