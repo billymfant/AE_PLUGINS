@@ -61,3 +61,10 @@ color-native/build-ae/*.ilk
 color-native/build-ae/*.exp
 color-native/build-ae/*.lib
 color-native/build-ae/*.pdb
+
+# native distort engine build intermediates + outputs (.aex is committed; rest ignored)
+distort-native/ae/x64/
+distort-native/build-ae/*.ilk
+distort-native/build-ae/*.exp
+distort-native/build-ae/*.lib
+distort-native/build-ae/*.pdb
