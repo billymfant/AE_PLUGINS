@@ -163,6 +163,7 @@ static void test_warp_slats_cols_uniform_shift(){
     warp(src,dst,P,nullptr,0.f);
     NEAR(dst.at(0,3)[0], 5.f, 1e-4f);                 // y=3 -> src 5
     NEAR(dst.at(0,6)[0], 7.f, 1e-4f);                 // y+2=8 -> clamp 7
+    NEAR(dst.at(2,3)[0], 5.f, 1e-4f);                 // column band 1 (x=2): y+2 = 5
 }
 static void test_warp_opacity_zero_is_source(){
     Image src=ramp_x(8,2), dst(8,2);

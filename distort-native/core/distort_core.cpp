@@ -85,7 +85,9 @@ static void warpBand(const Image& src, Image& dst, const Params& P, const Image*
                     float uc=((axc+0.5f)/src.w)*2.f-1.f;
                     float vc=((ayc+0.5f)/src.h)*2.f-1.f;
                     float fld=fieldAtAnchor(P,mapLayer,src.w,src.h,axc,ayc);
+                    // flowJitter takes the band index (not pixel coords) as its hash seed, so each band gets one jitter value (rigid slat).
                     float ff=ds_clamp(fld*flowWeight(P,uc,vc)*modul + flowJitter(P,ri,0),-1.f,1.f);
+                    // stagger: even bands always shift +; odd bands go +1 (stagger 0) -> -1 (stagger 1), passing through 0 at 0.5 (over/under weave).
                     float sign=(1.f-P.slatStagger)+P.slatStagger*((ri&1)?-1.f:1.f);
                     shiftX+=ff*P.amount*sign;
                 }
@@ -98,7 +100,9 @@ static void warpBand(const Image& src, Image& dst, const Params& P, const Image*
                     float uc=((axc+0.5f)/src.w)*2.f-1.f;
                     float vc=((ayc+0.5f)/src.h)*2.f-1.f;
                     float fld=fieldAtAnchor(P,mapLayer,src.w,src.h,axc,ayc);
+                    // flowJitter takes the band index (not pixel coords) as its hash seed, so each band gets one jitter value (rigid slat).
                     float ff=ds_clamp(fld*flowWeight(P,uc,vc)*modul + flowJitter(P,0,ci),-1.f,1.f);
+                    // stagger: even bands always shift +; odd bands go +1 (stagger 0) -> -1 (stagger 1), passing through 0 at 0.5 (over/under weave).
                     float sign=(1.f-P.slatStagger)+P.slatStagger*((ci&1)?-1.f:1.f);
                     shiftY+=ff*P.amount*sign;
                 }
