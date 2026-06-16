@@ -104,6 +104,11 @@ static Image ramp_x(int w,int h){                     // red channel = x index
     for(int y=0;y<h;y++) for(int x=0;x<w;x++){ float* p=im.at(x,y); p[0]=(float)x; p[1]=0;p[2]=0;p[3]=1.f; }
     return im;
 }
+static Image ramp_y(int w,int h){                     // red channel = y index
+    Image im(w,h);
+    for(int y=0;y<h;y++) for(int x=0;x<w;x++){ float* p=im.at(x,y); p[0]=(float)y; p[1]=0;p[2]=0;p[3]=1.f; }
+    return im;
+}
 static void test_warp_identity_when_amount_zero(){
     Image src=ramp_x(8,4), dst(8,4);
     Params P; P.amount=0.f;
@@ -129,6 +134,36 @@ static void test_warp_mosaic_blocks(){
     NEAR(dst.at(1,0)[0], 2.f, 1e-4f);
     NEAR(dst.at(5,0)[0], 6.f, 1e-4f);
 }
+static void test_warp_slats_rows_uniform_shift(){
+    // gradient spacing=0 -> field +1 everywhere; rows=2, stagger=0, amount=2.
+    // auto-weave rows slide +X by amount => dst red == src red at x+2 (clamp).
+    Image src=ramp_x(8,4), dst(8,4);
+    Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.amount=2.f;
+    P.edgeMode=EDGE_CLAMP; P.slatRows=2; P.slatStagger=0.f;
+    warp(src,dst,P,nullptr,0.f);
+    NEAR(dst.at(3,0)[0], 5.f, 1e-4f);                 // x=3 -> src 5, band 0
+    NEAR(dst.at(3,3)[0], 5.f, 1e-4f);                 // band 1 same (spacing0 uniform)
+    NEAR(dst.at(6,0)[0], 7.f, 1e-4f);                 // x+2=8 -> clamp 7
+}
+static void test_warp_slats_stagger_alternates_bands(){
+    // spacing0 field +1, rows=2 over h=4 (band0=y0..1, band1=y2..3), stagger=1, amount=2.
+    // band0 (ri=0 even) sign +1 -> shift +2; band1 (ri=1 odd) sign -1 -> shift -2.
+    Image src=ramp_x(8,4), dst(8,4);
+    Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.amount=2.f;
+    P.edgeMode=EDGE_CLAMP; P.slatRows=2; P.slatStagger=1.f;
+    warp(src,dst,P,nullptr,0.f);
+    NEAR(dst.at(3,0)[0], 5.f, 1e-4f);                 // band0: x+2 = 5
+    NEAR(dst.at(3,2)[0], 1.f, 1e-4f);                 // band1: x-2 = 1
+}
+static void test_warp_slats_cols_uniform_shift(){
+    // cols=2, spacing0 field +1, stagger0, amount2 -> shift +Y by 2. ramp_y red=y.
+    Image src=ramp_y(4,8), dst(4,8);
+    Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.amount=2.f;
+    P.edgeMode=EDGE_CLAMP; P.slatCols=2; P.slatStagger=0.f;
+    warp(src,dst,P,nullptr,0.f);
+    NEAR(dst.at(0,3)[0], 5.f, 1e-4f);                 // y=3 -> src 5
+    NEAR(dst.at(0,6)[0], 7.f, 1e-4f);                 // y+2=8 -> clamp 7
+}
 static void test_warp_opacity_zero_is_source(){
     Image src=ramp_x(8,2), dst(8,2);
     Params P; P.mapType=MAP_GRADIENT; P.spacing=0.f; P.amount=4.f; P.opacity=0.f;
@@ -153,6 +188,7 @@ int main(){
     test_bilinear_integer_exact(); test_bilinear_midpoint_average(); test_edge_clamp_outside(); test_edge_transparent_outside();
     test_warp_identity_when_amount_zero(); test_warp_known_shift(); test_warp_opacity_zero_is_source(); test_warp_layer_map_luma();
     test_warp_mosaic_blocks();
+    test_warp_slats_rows_uniform_shift(); test_warp_slats_stagger_alternates_bands(); test_warp_slats_cols_uniform_shift();
     if (g_fail==0) printf("ALL PASS\n"); else printf("%d FAILED\n", g_fail);
     return g_fail==0 ? 0 : 1;
 }

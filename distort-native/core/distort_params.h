@@ -47,6 +47,10 @@ struct Params {
     int   edgeMode    = EDGE_CLAMP;
     float opacity     = 1.f;     // 0..1 blend warped over source
     float mosaicBlock = 0.f;     // px; >=1 quantizes the warp into solid blocks (mosaic shuffle)
+    // slats (auto-weave): rigid Rows/Cols that slide (rows->X, cols->Y). 0 = off.
+    int   slatRows    = 0;
+    int   slatCols    = 0;
+    float slatStagger = 0.f;   // 0..1; alternate bands flip direction (over/under weave)
 };
 
 DS_HD inline float ds_clamp(float v,float lo,float hi){ return v<lo?lo:(v>hi?hi:v); }

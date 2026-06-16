@@ -72,6 +72,42 @@ static void warpBand(const Image& src, Image& dst, const Params& P, const Image*
                      float ca, float sa, float modul, int y0, int y1){
     for(int y=y0;y<y1;y++){
         for(int x=0;x<src.w;x++){
+            // ── Slats (auto-weave): rigid Rows/Cols that slide. Mutually exclusive
+            //    with the smooth/mosaic path (rows->X shift, cols->Y shift). ──────
+            if (P.slatRows>0 || P.slatCols>0){
+                float shiftX=0.f, shiftY=0.f;
+                if (P.slatRows>0){
+                    float rowH=(float)src.h/(float)P.slatRows;
+                    int ri=(int)floorf((float)y/rowH);
+                    if(ri<0) ri=0; if(ri>=P.slatRows) ri=P.slatRows-1;
+                    float axc=(float)src.w*0.5f;                 // rows uniform across x
+                    float ayc=((float)ri+0.5f)*rowH;             // band center
+                    float uc=((axc+0.5f)/src.w)*2.f-1.f;
+                    float vc=((ayc+0.5f)/src.h)*2.f-1.f;
+                    float fld=fieldAtAnchor(P,mapLayer,src.w,src.h,axc,ayc);
+                    float ff=ds_clamp(fld*flowWeight(P,uc,vc)*modul + flowJitter(P,ri,0),-1.f,1.f);
+                    float sign=(1.f-P.slatStagger)+P.slatStagger*((ri&1)?-1.f:1.f);
+                    shiftX+=ff*P.amount*sign;
+                }
+                if (P.slatCols>0){
+                    float colW=(float)src.w/(float)P.slatCols;
+                    int ci=(int)floorf((float)x/colW);
+                    if(ci<0) ci=0; if(ci>=P.slatCols) ci=P.slatCols-1;
+                    float axc=((float)ci+0.5f)*colW;             // band center
+                    float ayc=(float)src.h*0.5f;                 // cols uniform across y
+                    float uc=((axc+0.5f)/src.w)*2.f-1.f;
+                    float vc=((ayc+0.5f)/src.h)*2.f-1.f;
+                    float fld=fieldAtAnchor(P,mapLayer,src.w,src.h,axc,ayc);
+                    float ff=ds_clamp(fld*flowWeight(P,uc,vc)*modul + flowJitter(P,0,ci),-1.f,1.f);
+                    float sign=(1.f-P.slatStagger)+P.slatStagger*((ci&1)?-1.f:1.f);
+                    shiftY+=ff*P.amount*sign;
+                }
+                float sm[4]; sampleBilinear(src,(float)x+shiftX,(float)y+shiftY,P.edgeMode,sm);
+                float* o=dst.at(x,y);
+                if (P.opacity>=1.f){ o[0]=sm[0];o[1]=sm[1];o[2]=sm[2];o[3]=sm[3]; }
+                else { const float* s0=src.at(x,y); for(int k=0;k<4;k++) o[k]=s0[k]+(sm[k]-s0[k])*P.opacity; }
+                continue;                                        // skip smooth/mosaic path
+            }
             // mosaic: snap the sample anchor to block centers so each block is a solid
             // tile that displaces as one unit ("blocky" warp). Off when mosaicBlock<1.
             float ax=(float)x, ay=(float)y;
