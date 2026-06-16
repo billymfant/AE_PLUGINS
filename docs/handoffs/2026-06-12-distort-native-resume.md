@@ -52,14 +52,18 @@ cannot return transparency on opaque footage, so the fix covers the canvas. **No
    comp (footage has its own alpha/bounds), that's inherent — mirror can't invent content beyond
    the layer; the PreRender input-rect expansion wouldn't help either (no footage out there).
 
-## STILL OPEN — animate-rows: DECIDED = Spatial Rows/Slats
-User said "whatever is optimal"; decision = **Spatial Rows/Slats** mode (N horizontal bands, animate
-per-band offsets via existing flow). Rationale: single-frame, builds on the current engine, and
-matches the woven-slat SYSTMS look (see `docs/reference/timeslice-target-look.png`). True time-slice
-slit-scan (each row = a different TIME) stays as its own later **D4 temporal** phase (hard:
-multi-frame PF_CHECKOUT_LAYER). **Next session: brainstorm → spec → plan → implement Spatial Rows.**
-GPU (D2 CUDA) confirmed on roadmap — core/ is written portably to mirror into distort_cuda.cu later.
-- Later: D3b CEP panel wiring · D2 GPU/CUDA · D4 temporal slit-scan · refract lens mode.
+## DONE 2026-06-16 — Spatial Rows/Slats SHIPPED (+ D3b panel wiring). Distort Flow v1 feature-complete.
+- **D3b** (commit `30f1165`): Distort Flow wired into the CEP panel — Distortions tab Engine selector
+  (Built-in | Distort Flow) drives `DistortFlow.aex` by match-name via `jsx/distortflow.jsx`.
+- **Spatial Rows/Slats**: auto-weave mode — Rows slide X, Columns slide Y (each 0..64, 0=off), driven
+  by the map field per band center; `Slat Stagger` flips alternate bands (over/under weave). Own mode
+  (mutually exclusive w/ smooth+mosaic). Built subagent-driven, 6 TDD tasks, all reviewed. Engine tests
+  ALL PASS; panel verified headless (Woven Slats preset → payload correct, 0 JS errors). 6 Distort Flow
+  presets added. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-16-distort-spatial-slats*.md`.
+- ⚠️ **User action:** admin-copy the rebuilt `distort-native/build-ae/DistortFlow.aex` to AE Plug-ins +
+  relaunch + apply a FRESH effect instance to eyeball Slats on footage.
+- **Remaining (all later phases):** D2 GPU/CUDA · D4 temporal slit-scan ("wave timecut") · refract lens.
+  Also queued: new **Synapse** tool (blob-tracking HUD) — spec written, build not started.
 
 ## Key paths
 - Engine math: `distort-native/core/` (`distort_core.cpp warp()`, `distort_map.h mapValue`)
