@@ -95,6 +95,10 @@ var DistortFlow = (function () {
         _set(fx, 'Edges',              popup(params.dfEdge, 3));      // 1 Clamp 2 Wrap 3 Mirror 4 Transparent
         _set(fx, 'Opacity',            num(params.dfOpacity, 100));
         _set(fx, 'Mosaic Block (px)',  num(params.dfMosaic, 0));
+        // slats
+        _set(fx, 'Rows',          num(params.dfSlatRows, 0));
+        _set(fx, 'Columns',       num(params.dfSlatCols, 0));
+        _set(fx, 'Slat Stagger',  num(params.dfSlatStagger, 0));
 
         count++;
       }
