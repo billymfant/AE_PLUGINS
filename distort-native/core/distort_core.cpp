@@ -50,6 +50,22 @@ void sampleBilinear(const Image& im,float fx,float fy,int edge,float out[4]){
     tap(im,x0+1,y0+1,edge,tx*ty,        out);
 }
 
+// Signed map field in [-1,1] at a pixel anchor (ax,ay). Generators via mapValue;
+// MAP_LAYER samples the layer's luma/channel. Shared by the smooth and slat paths.
+static inline float fieldAtAnchor(const Params& P, const Image* mapLayer,
+                                  int W, int H, float ax, float ay){
+    float u=((ax+0.5f)/W)*2.f-1.f;
+    float v=((ay+0.5f)/H)*2.f-1.f;
+    if (P.mapType==MAP_LAYER && mapLayer){
+        float mx=((ax+0.5f)/W)*mapLayer->w-0.5f;
+        float my=((ay+0.5f)/H)*mapLayer->h-0.5f;
+        float m[4]; sampleBilinear(*mapLayer,mx,my,EDGE_CLAMP,m);
+        float val=(P.mapChannel==1)?m[0]:(P.mapChannel==2)?m[1]:(P.mapChannel==3)?m[2]:lumaRec709(m[0],m[1],m[2]);
+        return ds_remap(ds_clamp(2.f*val-1.f,-1.f,1.f), P.mapContrast);
+    }
+    return mapValue(P,u,v);
+}
+
 // One horizontal band [y0,y1) of the warp. Pure per-pixel work, no shared writes
 // outside dst's own rows, so bands run safely on separate threads.
 static void warpBand(const Image& src, Image& dst, const Params& P, const Image* mapLayer,
@@ -65,17 +81,7 @@ static void warpBand(const Image& src, Image& dst, const Params& P, const Image*
             }
             float u=((ax+0.5f)/src.w)*2.f-1.f;
             float v=((ay+0.5f)/src.h)*2.f-1.f;
-            // base field: generator, or sampled layer luma/channel for MAP_LAYER
-            float field;
-            if (P.mapType==MAP_LAYER && mapLayer){
-                float mx=((ax+0.5f)/src.w)*mapLayer->w-0.5f;
-                float my=((ay+0.5f)/src.h)*mapLayer->h-0.5f;
-                float m[4]; sampleBilinear(*mapLayer,mx,my,EDGE_CLAMP,m);
-                float val = (P.mapChannel==1)?m[0]:(P.mapChannel==2)?m[1]:(P.mapChannel==3)?m[2]:lumaRec709(m[0],m[1],m[2]);
-                field = ds_remap(ds_clamp(2.f*val-1.f,-1.f,1.f), P.mapContrast);
-            } else {
-                field = mapValue(P,u,v);
-            }
+            float field = fieldAtAnchor(P, mapLayer, src.w, src.h, ax, ay);
             float ff = ds_clamp(field*flowWeight(P,u,v)*modul + flowJitter(P,(int)ax,(int)ay), -1.f, 1.f);
             // displacement vector
             float dx,dy;
