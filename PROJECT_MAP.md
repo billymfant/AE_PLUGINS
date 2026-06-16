@@ -31,7 +31,7 @@ notes live in memory `color-native-progress`.
 | The **native Distort/Flow engine source** (map-driven warp math: gradient/radial/wave/noise maps, triangle in-place fields, fixed/gradient/push-pull displace, flow anim, **blocky mosaic**, multithreaded) | `distort-native/core/` (CPU; D2 CUDA later) |
 | The **compiled Distort Flow plugin** (`.aex`, spatial warp on footage; defaults Wave+Mirror = in-place/full-canvas) | `distort-native/build-ae/DistortFlow.aex` (D3a CPU, **user-verified on footage**) |
 | The **Distort Flow AE SDK shell** (builds the `.aex`) | `distort-native/ae/` — match-name `DKVB DistortFlow`, visible in Effect ▸ AE Plugin Suite |
-| **Distort native: spec · plans · resume handoff** | `docs/superpowers/specs/2026-06-11-native-distort-flow-design.md` · `docs/superpowers/plans/2026-06-1{1-D1,2-D3}-*.md` · `docs/handoffs/2026-06-12-distort-native-resume.md` (← start here) |
+| **Distort native: specs · resume handoff** | `docs/superpowers/specs/2026-06-11-native-distort-flow-design.md` (master) · `docs/superpowers/specs/2026-06-16-distort-spatial-slats-design.md` (slats) · `docs/handoffs/2026-06-12-distort-native-resume.md` (← start here). Done D1/D3 plans archived in `docs/history/plans/`. |
 | The **Deep Glow panel UI** (the interactive widget) | `js/plugins/glow/ui.js` |
 | The **Deep Glow ExtendScript** (applies the native effect) | `jsx/glow.jsx` |
 | The **compiled Deep Glow plugin** (what AE loads) | `glow-native/build-ae/DeepGlowGPU.aex` |
@@ -42,9 +42,10 @@ notes live in memory `color-native-progress`.
 | The **compiled Color Lab plugin** | `color-native/build-ae/ColorLab.aex` |
 | The **Color Lab engine source** (the math) | `color-native/core/` (CPU) + `color-native/cuda/` (GPU) |
 | The **shared panel design system** | `docs/design/DESIGN_LANGUAGE.md` |
-| **Color Lab spec + phase plans (P1–P5)** | `docs/superpowers/specs/2026-06-09-color-tool-native-design.md` · `docs/superpowers/plans/2026-06-09-color-tool-P*.md` |
+| **Color Lab spec** (master) | `docs/superpowers/specs/2026-06-09-color-tool-native-design.md` · done P1–P4 phase plans archived in `docs/history/plans/` |
 | **▶ FINAL PHASE plan** (ship-ready roadmap, F0–F7) | `docs/superpowers/plans/2026-06-09-final-phase-ship-ready.md` |
-| **Color Lab panel polish (Phase A — SHIPPED)** spec + plan | `docs/superpowers/specs/2026-06-10-colorlab-panel-polish-design.md` · `docs/superpowers/plans/2026-06-10-colorlab-panel-polish.md` |
+| **Color Lab preset overhaul (Phase B — pending)** spec | `docs/superpowers/specs/2026-06-10-colorlab-preset-overhaul-design.md` |
+| **Completed/superseded specs, plans, handoffs** (archive) | `docs/history/{specs,plans,handoffs}/` |
 | **Deep Glow status + plans + distribution** | `docs/handoffs/2026-06-08-deepglow-native-cep-handoff.md` |
 | **Engine tests / CPU-GPU parity** | `glow-native/tests/` · `glow-native/cuda/glow_parity.cpp` · `color-native/tests/` · `color-native/cuda/color_parity.cpp` |
 | The (superseded) **Electron app** | `electron-app/` |
