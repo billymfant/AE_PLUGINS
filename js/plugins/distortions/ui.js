@@ -2,6 +2,9 @@
 
 window.DistortionsUI = (function() {
   var _state = {
+    // Engine: 'builtin' (AE built-in stack) | 'flow' (native DistortFlow.aex)
+    engine:    'builtin',
+
     distType:  'lens',
     intensity:  50,
     centerX:    0.5,
@@ -22,7 +25,33 @@ window.DistortionsUI = (function() {
     animSpeed:        1.0,
     animAmount:       25,
     randomSeed:       1,
-    animationOutput:  'expressions'
+    animationOutput:  'expressions',
+
+    // ── Native Distort Flow (DistortFlow.aex) params — defaults mirror the
+    //    .aex (DistortFlow.cpp ParamsSetup); Amount defaults to 40 so a fresh
+    //    apply visibly does something (the engine's own default is 0 = identity).
+    dfMapType:    3,    // 1 Gradient 2 Radial 3 Wave 4 Noise
+    dfAngle:      0,
+    dfSpacing:    4,
+    dfWaveFreq:   4,
+    dfWavePhase:  0,
+    dfNoiseScale: 3,
+    dfNoiseDetail:3,
+    dfNoiseSeed:  1,
+    dfContrast:   0,
+    dfDispMode:   1,    // 1 Fixed 2 Along Gradient 3 Push-Pull
+    dfAmount:     40,
+    dfFlowDir:    1,    // 1 Forward 2 Reverse 3 Center-Out 4 Edges-In
+    dfFlowSpeed:  0,
+    dfLoop:       1,    // 1 Loop 2 Ping-Pong 3 Once
+    dfEasing:     1,    // 1 Linear..6 Exp
+    dfJitter:     0,
+    dfJitterSeed: 1,
+    dfPhase:      0,
+    dfEdge:       3,    // 1 Clamp 2 Wrap 3 Mirror 4 Transparent
+    dfOpacity:    100,
+    dfMosaic:     0,
+    dfTargetMode: 'selectedLayers'
   };
 
   function getParams() { return Utils.deepClone(_state); }
@@ -30,9 +59,13 @@ window.DistortionsUI = (function() {
   var _sliders = {};
   var _typeGroup, _lensSection, _warpSection, _swirlSection, _waveSection, _status;
   var _targetGroup, _animEnabledGroup, _animModeGroup, _animOutputGroup;
+  // Engine + native Distort Flow widgets
+  var _engineGroup, _builtinWrap, _flowWrap, _flowStatus;
+  var _df = {};   // native widgets keyed by state field
 
   function applyPreset(p) {
     Object.assign(_state, p);
+    if (p.engine !== undefined) _engineGroup.setValue(p.engine);
     _typeGroup.setValue(p.distType);
     _sliders.intensity.setValue(p.intensity);
     _sliders.radius.setValue(p.radius);
@@ -50,9 +83,40 @@ window.DistortionsUI = (function() {
     if (p.animSpeed !== undefined)       { _sliders.animSpeed.setValue(p.animSpeed); }
     if (p.animAmount !== undefined)      { _sliders.animAmount.setValue(p.animAmount); }
     if (p.randomSeed !== undefined)      { _sliders.randomSeed.setValue(p.randomSeed); }
+    // Native Distort Flow widgets — each guarded for back-compat presets
+    for (var k in _df) {
+      if (_df.hasOwnProperty(k) && p[k] !== undefined && _df[k]) { _df[k].setValue(p[k]); }
+    }
+    if (p.engine !== undefined) _showEngine(p.engine);
   }
 
   function init(container) {
+    // ── Engine selector (built-in stack vs native DistortFlow.aex) ─────────────
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Engine'));
+    _engineGroup = new ButtonGroup({
+      tooltip: 'Built-in stacks AE distort effects; Distort Flow drives the native DistortFlow.aex map-warp engine',
+      options: [
+        { value: 'builtin', label: 'Built-in' },
+        { value: 'flow',    label: 'Distort Flow' }
+      ],
+      value: _state.engine,
+      onChange: function(v) { _state.engine = v; _showEngine(v); }
+    });
+    container.appendChild(_engineGroup.el);
+
+    _builtinWrap = Utils.el('div', {});
+    _flowWrap    = Utils.el('div', {});
+    container.appendChild(_builtinWrap);
+    container.appendChild(_flowWrap);
+
+    _buildBuiltin(_builtinWrap);
+    _buildFlow(_flowWrap);
+
+    _showEngine(_state.engine);
+  }
+
+  // ── Built-in distortions (AE effect stack) — unchanged behaviour ─────────────
+  function _buildBuiltin(container) {
     // Type selector
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Distortion Type'));
     _typeGroup = new ButtonGroup({
@@ -233,6 +297,148 @@ window.DistortionsUI = (function() {
     container.appendChild(_status);
   }
 
+  // ── Native Distort Flow (DistortFlow.aex) — map-driven warp engine ───────────
+  function _buildFlow(container) {
+    // Map
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Map'));
+    _df.dfMapType = new Dropdown({ label: 'Map Type',
+      tooltip: 'Field that drives the displacement. Wave = smooth in-place; Noise = organic.',
+      options: [
+        { value: 1, label: 'Gradient' }, { value: 2, label: 'Radial' },
+        { value: 3, label: 'Wave' },     { value: 4, label: 'Noise' }
+      ],
+      value: _state.dfMapType,
+      onChange: function(v) { _state.dfMapType = parseInt(v, 10); } });
+    container.appendChild(_df.dfMapType.el);
+
+    _df.dfAngle = _mk('dfAngle', { label: 'Angle °', min: -180, max: 180, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Orientation of the map field' });
+    _df.dfSpacing = _mk('dfSpacing', { label: 'Spacing', min: 0, max: 32, value: 4, step: 0.01, decimals: 2, defaultValue: 4,
+      tooltip: 'Field cell spacing (0 = uniform field)' });
+    _df.dfWaveFreq = _mk('dfWaveFreq', { label: 'Wave Frequency', min: 0, max: 20, value: 4, step: 0.01, decimals: 2, defaultValue: 4,
+      tooltip: 'Wave map cycles' });
+    _df.dfWavePhase = _mk('dfWavePhase', { label: 'Wave Phase °', min: -360, max: 360, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Wave map phase offset' });
+    _df.dfNoiseScale = _mk('dfNoiseScale', { label: 'Noise Scale', min: 0.5, max: 16, value: 3, step: 0.01, decimals: 2, defaultValue: 3,
+      tooltip: 'Noise map feature size' });
+    _df.dfNoiseDetail = _mk('dfNoiseDetail', { label: 'Noise Detail', min: 1, max: 6, value: 3, step: 1, defaultValue: 3,
+      tooltip: 'Noise fBm octaves' });
+    _df.dfNoiseSeed = _mk('dfNoiseSeed', { label: 'Noise Seed', min: 1, max: 999, value: 1, step: 1, defaultValue: 1,
+      tooltip: 'Noise random seed' });
+    _df.dfContrast = _mk('dfContrast', { label: 'Map Contrast %', min: -100, max: 100, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Contrast of the map field' });
+    container.appendChild(_df.dfAngle.el);
+    container.appendChild(_df.dfSpacing.el);
+    container.appendChild(_df.dfWaveFreq.el);
+    container.appendChild(_df.dfWavePhase.el);
+    container.appendChild(_df.dfNoiseScale.el);
+    container.appendChild(_df.dfNoiseDetail.el);
+    container.appendChild(_df.dfNoiseSeed.el);
+    container.appendChild(_df.dfContrast.el);
+
+    // Displace
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Displace'));
+    _df.dfDispMode = new Dropdown({ label: 'Displace Mode',
+      tooltip: 'How the map drives pixel displacement',
+      options: [
+        { value: 1, label: 'Fixed' }, { value: 2, label: 'Along Gradient' }, { value: 3, label: 'Push-Pull' }
+      ],
+      value: _state.dfDispMode,
+      onChange: function(v) { _state.dfDispMode = parseInt(v, 10); } });
+    container.appendChild(_df.dfDispMode.el);
+    _df.dfAmount = _mk('dfAmount', { label: 'Amount px', min: 0, max: 400, value: 40, step: 1, defaultValue: 40,
+      tooltip: 'Displacement strength in pixels (0 = no warp)' });
+    container.appendChild(_df.dfAmount.el);
+
+    // Flow (animation)
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Flow'));
+    _df.dfFlowDir = new Dropdown({ label: 'Flow Direction',
+      tooltip: 'How the map animates over time',
+      options: [
+        { value: 1, label: 'Forward' }, { value: 2, label: 'Reverse' },
+        { value: 3, label: 'Center-Out' }, { value: 4, label: 'Edges-In' }
+      ],
+      value: _state.dfFlowDir,
+      onChange: function(v) { _state.dfFlowDir = parseInt(v, 10); } });
+    container.appendChild(_df.dfFlowDir.el);
+    _df.dfFlowSpeed = _mk('dfFlowSpeed', { label: 'Flow Speed cyc/s', min: -4, max: 4, value: 0, step: 0.01, decimals: 2, defaultValue: 0,
+      tooltip: 'Animation speed in cycles/second (0 = static)' });
+    container.appendChild(_df.dfFlowSpeed.el);
+    _df.dfLoop = new Dropdown({ label: 'Loop',
+      tooltip: 'Time looping behaviour',
+      options: [ { value: 1, label: 'Loop' }, { value: 2, label: 'Ping-Pong' }, { value: 3, label: 'Once' } ],
+      value: _state.dfLoop,
+      onChange: function(v) { _state.dfLoop = parseInt(v, 10); } });
+    container.appendChild(_df.dfLoop.el);
+    _df.dfEasing = new Dropdown({ label: 'Easing',
+      tooltip: 'Time easing curve',
+      options: [
+        { value: 1, label: 'Linear' }, { value: 2, label: 'Ease In' }, { value: 3, label: 'Ease Out' },
+        { value: 4, label: 'Ease In-Out' }, { value: 5, label: 'Sine' }, { value: 6, label: 'Exp' }
+      ],
+      value: _state.dfEasing,
+      onChange: function(v) { _state.dfEasing = parseInt(v, 10); } });
+    container.appendChild(_df.dfEasing.el);
+    _df.dfJitter = _mk('dfJitter', { label: 'Jitter %', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Random temporal jitter' });
+    _df.dfJitterSeed = _mk('dfJitterSeed', { label: 'Jitter Seed', min: 1, max: 999, value: 1, step: 1, defaultValue: 1,
+      tooltip: 'Jitter random seed' });
+    _df.dfPhase = _mk('dfPhase', { label: 'Phase', min: 0, max: 1, value: 0, step: 0.001, decimals: 3, defaultValue: 0,
+      tooltip: 'Manual phase offset (0..1)' });
+    container.appendChild(_df.dfJitter.el);
+    container.appendChild(_df.dfJitterSeed.el);
+    container.appendChild(_df.dfPhase.el);
+
+    // Output
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Output'));
+    _df.dfEdge = new Dropdown({ label: 'Edges',
+      tooltip: 'Edge handling. Mirror fills the canvas (no transparent gaps).',
+      options: [
+        { value: 1, label: 'Clamp' }, { value: 2, label: 'Wrap' }, { value: 3, label: 'Mirror' }, { value: 4, label: 'Transparent' }
+      ],
+      value: _state.dfEdge,
+      onChange: function(v) { _state.dfEdge = parseInt(v, 10); } });
+    container.appendChild(_df.dfEdge.el);
+    _df.dfOpacity = _mk('dfOpacity', { label: 'Opacity %', min: 0, max: 100, value: 100, step: 1, defaultValue: 100,
+      tooltip: 'Blend of the warped result over the original' });
+    _df.dfMosaic = _mk('dfMosaic', { label: 'Mosaic Block px', min: 0, max: 200, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Block-snap the displacement into chunky tiles (0 = smooth)' });
+    container.appendChild(_df.dfOpacity.el);
+    container.appendChild(_df.dfMosaic.el);
+
+    // Apply Target
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Apply Target'));
+    _df.dfTargetMode = new Dropdown({ label: 'Target',
+      tooltip: 'Where to apply Distort Flow',
+      options: [
+        { value: 'selectedLayers',     label: 'Selected Layers' },
+        { value: 'newAdjustment',      label: 'New Adjustment Layer' },
+        { value: 'selectedAdjustment', label: 'Selected Adjustment' }
+      ],
+      value: _state.dfTargetMode,
+      onChange: function(v) { _state.dfTargetMode = v; } });
+    container.appendChild(_df.dfTargetMode.el);
+
+    // Apply button + status
+    var flowBtn = Utils.el('button', { class: 'action-btn' }, 'Apply Distort Flow');
+    flowBtn.addEventListener('click', function() { _applyFlow(flowBtn); });
+    container.appendChild(flowBtn);
+
+    _flowStatus = Utils.el('div', { class: 'status-bar' }, '');
+    container.appendChild(_flowStatus);
+  }
+
+  // Make a native-param Slider that writes _state[field]; returns the Slider.
+  function _mk(field, opts) {
+    opts.onChange = function(v) { _state[field] = v; };
+    return new Slider(opts);
+  }
+
+  function _showEngine(engine) {
+    _builtinWrap.style.display = (engine === 'flow') ? 'none' : '';
+    _flowWrap.style.display    = (engine === 'flow') ? '' : 'none';
+  }
+
   function _showSection(type) {
     _lensSection.style.display  = (type === 'lens')  ? '' : 'none';
     _warpSection.style.display  = (type === 'warp')  ? '' : 'none';
@@ -252,6 +458,24 @@ window.DistortionsUI = (function() {
       btn.disabled    = false;
       btn.textContent = 'Apply Distortion';
       _status.className = 'status-bar error'; _status.textContent = e.message;
+    });
+  }
+
+  function _applyFlow(btn) {
+    btn.disabled    = true;
+    btn.textContent = 'Applying…';
+    Bridge.call('distortflow.apply', getParams()).then(function(result) {
+      btn.disabled    = false;
+      btn.textContent = 'Apply Distort Flow';
+      if (result.error) { _flowStatus.className = 'status-bar error'; _flowStatus.textContent = result.error; }
+      else {
+        _flowStatus.className = 'status-bar success';
+        _flowStatus.textContent = 'Distort Flow applied' + (result.layer ? ' to ' + result.layer + '.' : '.');
+      }
+    }).catch(function(e) {
+      btn.disabled    = false;
+      btn.textContent = 'Apply Distort Flow';
+      _flowStatus.className = 'status-bar error'; _flowStatus.textContent = e.message;
     });
   }
 

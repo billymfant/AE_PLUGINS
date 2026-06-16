@@ -26,7 +26,8 @@ notes live in memory `color-native-progress`.
 | You want… | It's here |
 |---|---|
 | The **Distortions panel UI** | `js/plugins/distortions/ui.js` |
-| The **Distortions ExtendScript** (stacks AE built-ins: Optics Compensation, Mesh Warp, Twirl, Wave Warp, Bulge — no native `.aex`) | `jsx/distortions.jsx` |
+| The **Distortions ExtendScript** (stacks AE built-ins: Optics Compensation, Mesh Warp, Twirl, Wave Warp, Bulge) | `jsx/distortions.jsx` |
+| The **Distort Flow panel→native bridge** (applies `DKVB DistortFlow` by match-name, pushes panel params) — the **Engine ▸ Distort Flow** mode of the Distortions tab (D3b) | `jsx/distortflow.jsx` · UI in `js/plugins/distortions/ui.js` |
 | The **native Distort/Flow engine source** (map-driven warp math: gradient/radial/wave/noise maps, triangle in-place fields, fixed/gradient/push-pull displace, flow anim, **blocky mosaic**, multithreaded) | `distort-native/core/` (CPU; D2 CUDA later) |
 | The **compiled Distort Flow plugin** (`.aex`, spatial warp on footage; defaults Wave+Mirror = in-place/full-canvas) | `distort-native/build-ae/DistortFlow.aex` (D3a CPU, **user-verified on footage**) |
 | The **Distort Flow AE SDK shell** (builds the `.aex`) | `distort-native/ae/` — match-name `DKVB DistortFlow`, visible in Effect ▸ AE Plugin Suite |
