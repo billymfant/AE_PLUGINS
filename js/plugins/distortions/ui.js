@@ -59,6 +59,15 @@ window.DistortionsUI = (function() {
 
   function getParams() { return Utils.deepClone(_state); }
 
+  // Debounced LIVE update — pushes current params onto an EXISTING Distort Flow
+  // effect so dragging sliders/dropdowns updates the layer in real time (like
+  // Color Lab). liveOnly=true => the jsx only updates, never creates an effect.
+  var _liveFlow = Utils.debounce(function () {
+    if (_state.engine !== 'flow') return;
+    var p = Utils.deepClone(_state); p.liveOnly = true;
+    Bridge.call('distortflow.apply', p).catch(function () {});
+  }, 150);
+
   var _sliders = {};
   var _typeGroup, _lensSection, _warpSection, _swirlSection, _waveSection, _status;
   var _targetGroup, _animEnabledGroup, _animModeGroup, _animOutputGroup;
@@ -90,6 +99,7 @@ window.DistortionsUI = (function() {
       if (_df.hasOwnProperty(k) && p[k] !== undefined && _df[k]) { _df[k].setValue(p[k]); }
     }
     if (p.engine !== undefined) _showEngine(p.engine);
+    _liveFlow();   // push the loaded preset onto an existing effect, if any
   }
 
   function init(container) {
@@ -310,7 +320,7 @@ window.DistortionsUI = (function() {
         { value: 3, label: 'Wave' },     { value: 4, label: 'Noise' }
       ],
       value: _state.dfMapType,
-      onChange: function(v) { _state.dfMapType = parseInt(v, 10); } });
+      onChange: function(v) { _state.dfMapType = parseInt(v, 10); _liveFlow(); } });
     container.appendChild(_df.dfMapType.el);
 
     _df.dfAngle = _mk('dfAngle', { label: 'Angle °', min: -180, max: 180, value: 0, step: 1, defaultValue: 0,
@@ -346,7 +356,7 @@ window.DistortionsUI = (function() {
         { value: 1, label: 'Fixed' }, { value: 2, label: 'Along Gradient' }, { value: 3, label: 'Push-Pull' }
       ],
       value: _state.dfDispMode,
-      onChange: function(v) { _state.dfDispMode = parseInt(v, 10); } });
+      onChange: function(v) { _state.dfDispMode = parseInt(v, 10); _liveFlow(); } });
     container.appendChild(_df.dfDispMode.el);
     _df.dfAmount = _mk('dfAmount', { label: 'Amount px', min: 0, max: 400, value: 40, step: 1, defaultValue: 40,
       tooltip: 'Displacement strength in pixels (0 = no warp)' });
@@ -361,7 +371,7 @@ window.DistortionsUI = (function() {
         { value: 3, label: 'Center-Out' }, { value: 4, label: 'Edges-In' }
       ],
       value: _state.dfFlowDir,
-      onChange: function(v) { _state.dfFlowDir = parseInt(v, 10); } });
+      onChange: function(v) { _state.dfFlowDir = parseInt(v, 10); _liveFlow(); } });
     container.appendChild(_df.dfFlowDir.el);
     _df.dfFlowSpeed = _mk('dfFlowSpeed', { label: 'Flow Speed cyc/s', min: -4, max: 4, value: 0, step: 0.01, decimals: 2, defaultValue: 0,
       tooltip: 'Animation speed in cycles/second (0 = static)' });
@@ -370,7 +380,7 @@ window.DistortionsUI = (function() {
       tooltip: 'Time looping behaviour',
       options: [ { value: 1, label: 'Loop' }, { value: 2, label: 'Ping-Pong' }, { value: 3, label: 'Once' } ],
       value: _state.dfLoop,
-      onChange: function(v) { _state.dfLoop = parseInt(v, 10); } });
+      onChange: function(v) { _state.dfLoop = parseInt(v, 10); _liveFlow(); } });
     container.appendChild(_df.dfLoop.el);
     _df.dfEasing = new Dropdown({ label: 'Easing',
       tooltip: 'Time easing curve',
@@ -379,7 +389,7 @@ window.DistortionsUI = (function() {
         { value: 4, label: 'Ease In-Out' }, { value: 5, label: 'Sine' }, { value: 6, label: 'Exp' }
       ],
       value: _state.dfEasing,
-      onChange: function(v) { _state.dfEasing = parseInt(v, 10); } });
+      onChange: function(v) { _state.dfEasing = parseInt(v, 10); _liveFlow(); } });
     container.appendChild(_df.dfEasing.el);
     _df.dfJitter = _mk('dfJitter', { label: 'Jitter %', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
       tooltip: 'Random temporal jitter' });
@@ -399,7 +409,7 @@ window.DistortionsUI = (function() {
         { value: 1, label: 'Clamp' }, { value: 2, label: 'Wrap' }, { value: 3, label: 'Mirror' }, { value: 4, label: 'Transparent' }
       ],
       value: _state.dfEdge,
-      onChange: function(v) { _state.dfEdge = parseInt(v, 10); } });
+      onChange: function(v) { _state.dfEdge = parseInt(v, 10); _liveFlow(); } });
     container.appendChild(_df.dfEdge.el);
     _df.dfOpacity = _mk('dfOpacity', { label: 'Opacity %', min: 0, max: 100, value: 100, step: 1, defaultValue: 100,
       tooltip: 'Blend of the warped result over the original' });
@@ -444,7 +454,7 @@ window.DistortionsUI = (function() {
 
   // Make a native-param Slider that writes _state[field]; returns the Slider.
   function _mk(field, opts) {
-    opts.onChange = function(v) { _state[field] = v; };
+    opts.onChange = function(v) { _state[field] = v; _liveFlow(); };
     return new Slider(opts);
   }
 

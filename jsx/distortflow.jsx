@@ -11,12 +11,15 @@ var DistortFlow = (function () {
   function popup(v, d) { var n = parseInt(v, 10); return (!isNaN(n) && n >= 1) ? n : d; }
 
   // Reuse an existing Distort Flow on the layer (re-apply = update), else add.
-  function _fx(layer) {
+  // In live mode we ONLY update an existing effect — never add one — so dragging
+  // sliders updates the layer in place and can't spawn effects on its own.
+  function _fx(layer, live) {
     var parade = layer.property('ADBE Effect Parade');
     for (var i = 1; i <= parade.numProperties; i++) {
       var p = parade.property(i);
       if (p && p.matchName === MATCH) return p;
     }
+    if (live) return null;
     if (!parade.canAddProperty(MATCH)) {
       throw new Error('Distort Flow plugin not found. Install DistortFlow.aex into the AE Plug-ins folder and relaunch AE.');
     }
@@ -31,7 +34,9 @@ var DistortFlow = (function () {
 
   // Resolve the target layer(s): selected layers (default), a shared "Distort
   // Flow" adjustment layer, or the selected adjustment layers.
-  function _targets(comp, mode) {
+  // In live mode we never CREATE a layer and never throw — if there's nothing to
+  // update we just return [] so the debounced live edit is a silent no-op.
+  function _targets(comp, mode, live) {
     var sel = comp.selectedLayers;
 
     if (mode === 'newAdjustment') {
@@ -40,6 +45,7 @@ var DistortFlow = (function () {
         if (comp.layers[i].name === 'Distort Flow') { adj = comp.layers[i]; break; }
       }
       if (!adj) {
+        if (live) return [];
         adj = comp.layers.addSolid([0, 0, 0], 'Distort Flow', comp.width, comp.height, comp.pixelAspect, comp.duration);
         adj.adjustmentLayer = true;
         adj.moveToBeginning();
@@ -50,23 +56,24 @@ var DistortFlow = (function () {
     if (mode === 'selectedAdjustment') {
       var adjs = [];
       if (sel) for (var s = 0; s < sel.length; s++) if (sel[s].adjustmentLayer === true) adjs.push(sel[s]);
-      if (adjs.length === 0) throw new Error('Select at least one adjustment layer, or choose New Adjustment Layer.');
+      if (adjs.length === 0) { if (live) return []; throw new Error('Select at least one adjustment layer, or choose New Adjustment Layer.'); }
       return adjs;
     }
 
     // selectedLayers (default)
-    if (!sel || sel.length === 0) throw new Error('Select one or more layers to apply Distort Flow.');
+    if (!sel || sel.length === 0) { if (live) return []; throw new Error('Select one or more layers to apply Distort Flow.'); }
     return sel;
   }
 
   function apply(params) {
+    var live = !!params.liveOnly;
     return withUndo('Distort Flow', function () {
       var comp = requireComp();
-      var layers = _targets(comp, params.dfTargetMode || 'selectedLayers');
+      var layers = _targets(comp, params.dfTargetMode || 'selectedLayers', live);
 
       var count = 0, firstName = null;
       for (var li = 0; li < layers.length; li++) {
-        var fx = _fx(layers[li]);
+        var fx = _fx(layers[li], live);
         if (!fx) continue;
         if (!firstName) firstName = layers[li].name;
 
