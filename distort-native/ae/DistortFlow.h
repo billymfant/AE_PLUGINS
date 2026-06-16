@@ -48,6 +48,10 @@ enum {
     DFP_EDGE,         /* popup Clamp|Wrap|Mirror|Transparent (1..4 == EDGE_*)    */
     DFP_OPACITY,      /* %     0..100      default 100 (-> 0..1)                 */
     DFP_MOSAIC,       /* px    0..200      default 0   (>=1 => blocky mosaic)    */
+    /* slats (auto-weave) */
+    DFP_SLATROWS,     /* int   0..64       default 0   (>0 => weave mode)        */
+    DFP_SLATCOLS,     /* int   0..64       default 0                            */
+    DFP_SLATSTAGGER,  /* %     0..100      default 0   (-> 0..1)                */
     DF_NUM_PARAMS     /* keep last */
 };
 

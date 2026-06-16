@@ -105,6 +105,12 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
     PF_ADD_FLOAT_SLIDERX("Opacity", 0, 100, 0, 100, 100, PF_Precision_INTEGER, 0, 0, DFP_OPACITY);
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Mosaic Block (px)", 0, 200, 0, 200, 0, PF_Precision_INTEGER, 0, 0, DFP_MOSAIC);
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Rows", 0, 64, 0, 64, 0, PF_Precision_INTEGER, 0, 0, DFP_SLATROWS);
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Columns", 0, 64, 0, 64, 0, PF_Precision_INTEGER, 0, 0, DFP_SLATCOLS);
+    AEFX_CLR_STRUCT(def);
+    PF_ADD_FLOAT_SLIDERX("Slat Stagger", 0, 100, 0, 100, 0, PF_Precision_INTEGER, 0, 0, DFP_SLATSTAGGER);
 
     out_data->num_params = DF_NUM_PARAMS;
     return err;
@@ -137,6 +143,9 @@ ReadParams(PF_ParamDef* params[])
     p.edgeMode     = (int)params[DFP_EDGE]->u.pd.value;           // 1..4 == EDGE_*
     p.opacity      = (float)(params[DFP_OPACITY]->u.fs_d.value / 100.0);
     p.mosaicBlock  = (float)params[DFP_MOSAIC]->u.fs_d.value;
+    p.slatRows    = (int)params[DFP_SLATROWS]->u.fs_d.value;
+    p.slatCols    = (int)params[DFP_SLATCOLS]->u.fs_d.value;
+    p.slatStagger = (float)(params[DFP_SLATSTAGGER]->u.fs_d.value / 100.0);
     return p;
 }
 
