@@ -51,6 +51,9 @@ window.DistortionsUI = (function() {
     dfEdge:       3,    // 1 Clamp 2 Wrap 3 Mirror 4 Transparent
     dfOpacity:    100,
     dfMosaic:     0,
+    dfSlatRows:   0,
+    dfSlatCols:   0,
+    dfSlatStagger:0,
     dfTargetMode: 'selectedLayers'
   };
 
@@ -66,14 +69,13 @@ window.DistortionsUI = (function() {
   function applyPreset(p) {
     Object.assign(_state, p);
     if (p.engine !== undefined) _engineGroup.setValue(p.engine);
-    _typeGroup.setValue(p.distType);
-    _sliders.intensity.setValue(p.intensity);
-    _sliders.radius.setValue(p.radius);
-    _sliders.feather.setValue(p.feather !== undefined ? p.feather : 0);
-    _sliders.blendOpacity.setValue(p.blendOpacity);
-    _sliders.centerX.setValue(p.centerX !== undefined ? p.centerX : 0.5);
-    _sliders.centerY.setValue(p.centerY !== undefined ? p.centerY : 0.5);
-    _showSection(p.distType);
+    if (p.distType !== undefined)     { _typeGroup.setValue(p.distType); _showSection(p.distType); }
+    if (p.intensity !== undefined)    { _sliders.intensity.setValue(p.intensity); }
+    if (p.radius !== undefined)       { _sliders.radius.setValue(p.radius); }
+    if (p.feather !== undefined)      { _sliders.feather.setValue(p.feather); }
+    if (p.blendOpacity !== undefined) { _sliders.blendOpacity.setValue(p.blendOpacity); }
+    if (p.centerX !== undefined)      { _sliders.centerX.setValue(p.centerX); }
+    if (p.centerY !== undefined)      { _sliders.centerY.setValue(p.centerY); }
     // New fields — guarded so older presets without them don't throw
     if (p.targetMode !== undefined)      { _targetGroup.setValue(p.targetMode); }
     if (p.animateEnabled !== undefined)  { _animEnabledGroup.setValue(p.animateEnabled); }
@@ -405,6 +407,18 @@ window.DistortionsUI = (function() {
       tooltip: 'Block-snap the displacement into chunky tiles (0 = smooth)' });
     container.appendChild(_df.dfOpacity.el);
     container.appendChild(_df.dfMosaic.el);
+
+    // Slats (auto-weave)
+    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Slats (Weave)'));
+    _df.dfSlatRows = _mk('dfSlatRows', { label: 'Rows', min: 0, max: 64, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Horizontal slat bands that slide along X (0 = off). Any Rows/Columns > 0 switches to weave mode.' });
+    _df.dfSlatCols = _mk('dfSlatCols', { label: 'Columns', min: 0, max: 64, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Vertical slat bands that slide along Y (0 = off).' });
+    _df.dfSlatStagger = _mk('dfSlatStagger', { label: 'Stagger %', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
+      tooltip: 'Alternate bands shift in opposite directions (over/under weave).' });
+    container.appendChild(_df.dfSlatRows.el);
+    container.appendChild(_df.dfSlatCols.el);
+    container.appendChild(_df.dfSlatStagger.el);
 
     // Apply Target
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Apply Target'));
