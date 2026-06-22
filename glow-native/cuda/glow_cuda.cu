@@ -172,12 +172,14 @@ __device__ __forceinline__ float d_tonemap1(float x,const Params& p){
    Writes into `out`. `lin` is the (optionally linearized) source; `glow` is the
    accumulated upsample buffer. */
 __global__ void k_composite(const float* lin, const float* glow, float* out,
-                            int w, int h, Params p){
+                            int w, int h, float wnorm, Params p){
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     if (x>=w || y>=h) return;
     size_t i = (size_t(y)*w + x)*4;
-    float gr=glow[i], gg=glow[i+1], gb=glow[i+2];
+    // Energy-normalize the glow color (mirror glow_core.cpp step 4). Alpha
+    // (glow[i+3], read below) stays un-normalized — it is coverage, not energy.
+    float gr=glow[i]*wnorm, gg=glow[i+1]*wnorm, gb=glow[i+2]*wnorm;
     d_applyTint(gr,gg,gb,p);
     gr*=p.intensity; gg*=p.intensity; gb*=p.intensity;
     gr=d_tonemap1(gr,p); gg=d_tonemap1(gg,p); gb=d_tonemap1(gb,p);
@@ -292,7 +294,8 @@ extern "C" int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut,
         }
 
         // 4. composite
-        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, p);
+        float wnorm = glow::levelWeightNorm(nmips, p.falloff);
+        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, wnorm, p);
         CU_TRY(cudaGetLastError());
 
         // 5. optional de-linearize
@@ -433,7 +436,8 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
             CU_TRY(cudaGetLastError());
         }
 
-        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, p);
+        float wnorm = glow::levelWeightNorm(nmips, p.falloff);
+        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, wnorm, p);
         CU_TRY(cudaGetLastError());
 
         if (p.linearLight){ k_lin_to_srgb<<<g,block>>>(dOut, w, h); CU_TRY(cudaGetLastError()); }
