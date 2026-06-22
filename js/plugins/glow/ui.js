@@ -33,6 +33,43 @@ window.GlowUI = (function() {
 
   function getParams() { return Utils.deepClone(_state); }
 
+  // Mirror of glow::selValue (glow_params.h): qualifier value 0..1 for a pixel
+  // under the current Range Mode, in DISPLAY space (matches the engine's now-
+  // perceptual threshold). Keep bit-aligned with the C++ helper.
+  function selValueJS(r, g, b, mode) {
+    if (mode === 2) {                                  // saturation (HSV)
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      return mx <= 1e-6 ? 0 : (mx - mn) / mx;
+    }
+    if (mode === 3) {                                  // hue 0..1
+      var hmx = Math.max(r, g, b), hmn = Math.min(r, g, b), d = hmx - hmn;
+      if (d <= 1e-6) return 0;
+      var h;
+      if      (hmx === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (hmx === g) h = (b - r) / d + 2;
+      else                h = (r - g) / d + 4;
+      return h / 6;
+    }
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;       // luminance (Rec.709)
+  }
+
+  // 256-bin distribution of the qualifier over a canvas ImageData, normalized
+  // to 0..1 (peak bin = 1). Skips fully-transparent pixels. Drawn behind the
+  // selection band on the same 0..255 axis.
+  function computeHistogram(imageData, mode) {
+    var bins = new Array(256), i;
+    for (i = 0; i < 256; i++) bins[i] = 0;
+    var px = imageData.data, n = px.length, mx = 0;
+    for (var p = 0; p < n; p += 4) {
+      if (px[p + 3] === 0) continue;
+      var v = selValueJS(px[p] / 255, px[p + 1] / 255, px[p + 2] / 255, mode);
+      var b = v < 0 ? 0 : (v > 1 ? 255 : Math.round(v * 255));
+      bins[b]++; if (bins[b] > mx) mx = bins[b];
+    }
+    if (mx > 0) for (var k = 0; k < 256; k++) bins[k] /= mx;
+    return bins;
+  }
+
   var _sliders = {};
   var _falloffGroup, _blendDD, _qualityGroup, _glowColor, _colorizeToggle, _status;
   var _glowOnlyToggle, _useControllerToggle, _stretchGroup;
