@@ -32,19 +32,23 @@ static inline float smoothstep(float e0, float e1, float x){
     return t*t*(3.0f - 2.0f*t);
 }
 
-Image extractBright(const Image& src, const Params& p) {
-    Image out(src.w, src.h);
+Image extractBright(const Image& disp, const Image& lin, const Params& p) {
+    Image out(lin.w, lin.h);
     // The selection is a trapezoidal band on the chosen channel (luminance /
-    // saturation / hue), feathered on both feet and optionally inverted. With
-    // the defaults (rangeMode=luminance, rangeHigh>=1) this reduces exactly to
-    // the old "luma >= threshold" high-pass, so existing looks are unchanged.
-    for (int y=0;y<src.h;++y) for (int x=0;x<src.w;++x){
-        const float* s = src.at(x,y);
-        float v = selValue(s[0], s[1], s[2], p.rangeMode);
+    // saturation / hue), feathered on both feet and optionally inverted. The
+    // mask is qualified from `disp` (display / sRGB space) so the 0..255
+    // Threshold matches what the user sees; the extracted COLOR comes from
+    // `lin` (linear light) so the downstream blur stays physically correct.
+    // With linearLight off the caller passes disp == lin and this is a no-op
+    // change, so existing looks are unchanged.
+    for (int y=0;y<lin.h;++y) for (int x=0;x<lin.w;++x){
+        const float* d = disp.at(x,y);
+        const float* l = lin.at(x,y);
+        float v = selValue(d[0], d[1], d[2], p.rangeMode);
         float m = rangeMask(v, p.threshold, p.thresholdSoft,
                             p.rangeHigh, p.rangeSoftHigh, p.invertRange);
         float* o = out.at(x,y);
-        o[0]=s[0]*m*p.sourceGain; o[1]=s[1]*m*p.sourceGain; o[2]=s[2]*m*p.sourceGain; o[3]=m;
+        o[0]=l[0]*m*p.sourceGain; o[1]=l[1]*m*p.sourceGain; o[2]=l[2]*m*p.sourceGain; o[3]=m;
     }
     return out;
 }
@@ -118,8 +122,9 @@ Image bloom(const Image& src, const Params& p) {
     if (p.linearLight) for (size_t i=0;i<lin.px.size();i+=4){
         lin.px[i]=srgb_to_lin(lin.px[i]); lin.px[i+1]=srgb_to_lin(lin.px[i+1]); lin.px[i+2]=srgb_to_lin(lin.px[i+2]); }
 
-    // 1. extract bright source
-    Image bright = extractBright(lin, p);
+    // 1. extract bright source — mask from the display-space src (perceptual
+    //    threshold), color from the (optionally linearized) lin.
+    Image bright = extractBright(src, lin, p);
 
     // 2. build mip chain
     int minDim = src.w<src.h?src.w:src.h;

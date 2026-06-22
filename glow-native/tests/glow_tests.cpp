@@ -93,9 +93,9 @@ static void test_AC1_threshold_direction() {
     Params lo;  lo.threshold = 0.10f; lo.thresholdSoft = 0.0f; lo.sourceGain = 1.f;
     Params mid = lo; mid.threshold = 0.50f;
     Params hi  = lo; hi.threshold  = 0.90f;
-    float elo  = energy(extractBright(src, lo));
-    float emid = energy(extractBright(src, mid));
-    float ehi  = energy(extractBright(src, hi));
+    float elo  = energy(extractBright(src, src,lo));
+    float emid = energy(extractBright(src, src,mid));
+    float ehi  = energy(extractBright(src, src,hi));
     CHECK(elo > 200.0f);                  // low threshold extracts a strong, obvious amount
     CHECK(elo > emid && emid > ehi);      // higher threshold => less extracted (NOT inverted)
 }
@@ -175,7 +175,7 @@ static void test_range_band_selects_midtones(){
     Image src = lumaRamp(64,64);                 // column x -> luma x/63
     Params p; p.rangeMode=RANGE_LUMINANCE; p.threshold=0.40f; p.thresholdSoft=0.0f;
     p.rangeHigh=0.60f; p.rangeSoftHigh=0.0f; p.sourceGain=1.f;
-    Image e = extractBright(src, p);
+    Image e = extractBright(src, src,p);
     CHECK(e.at(31,32)[3] > 0.5f);                // luma ~0.49 inside the band
     CHECK(e.at(6 ,32)[3] < 0.01f);               // luma ~0.10 below the band
     CHECK(e.at(57,32)[3] < 0.01f);               // luma ~0.90 above the band
@@ -186,7 +186,7 @@ static void test_range_invert_flips(){
     Image src = lumaRamp(64,64);
     Params p; p.rangeMode=RANGE_LUMINANCE; p.threshold=0.40f; p.thresholdSoft=0.0f;
     p.rangeHigh=0.60f; p.rangeSoftHigh=0.0f; p.invertRange=true;
-    Image e = extractBright(src, p);
+    Image e = extractBright(src, src,p);
     CHECK(e.at(31,32)[3] < 0.5f);                // midtone now EXCLUDED
     CHECK(e.at(6 ,32)[3] > 0.99f);               // shadow now INCLUDED
     CHECK(e.at(57,32)[3] > 0.99f);               // highlight now INCLUDED
@@ -197,8 +197,25 @@ static void test_range_default_is_legacy_highpass(){
     Image src = lumaRamp(64,64);
     Params lo; lo.threshold=0.10f; lo.thresholdSoft=0.0f; lo.sourceGain=1.f;
     Params hi = lo; hi.threshold=0.90f;
-    CHECK(energy(extractBright(src,lo)) > energy(extractBright(src,hi)));
+    CHECK(energy(extractBright(src, src, lo)) > energy(extractBright(src, src, hi)));
 }
+static void test_AC_perceptual_threshold_mask_from_display(){
+    // The mask is built from the DISPLAY (sRGB) values so the Threshold number
+    // matches what the user sees; the extracted COLOR stays linear so the blur
+    // is physically correct. A mid-gray sRGB 0.5 patch (linear ~0.214) must
+    // qualify at threshold 0.40. Pre-fix the mask ran on linear 0.214 (< 0.40
+    // => wrongly excluded).
+    Image disp(4,4), lin(4,4);
+    for (size_t i=0;i<disp.px.size();i+=4){
+        disp.px[i]=disp.px[i+1]=disp.px[i+2]=0.5f;   disp.px[i+3]=1.f; // sRGB 0.5
+        lin.px[i] =lin.px[i+1] =lin.px[i+2] =0.214f; lin.px[i+3]=1.f;  // linear of 0.5
+    }
+    Params p; p.threshold=0.40f; p.thresholdSoft=0.0f; p.sourceGain=1.f;
+    Image e = extractBright(disp, lin, p);
+    CHECK(e.at(0,0)[3] > 0.99f);                       // mask from DISPLAY 0.5 >= 0.40 -> selected
+    CHECK(std::fabs(e.at(0,0)[0]-0.214f) < 1e-4f);     // color stays LINEAR
+}
+
 static void test_hue_shift_rotates_color(){
     // Luma-preserving hue rotation: red rotated +120deg lands in the green family.
     float r=1.f,g=0.f,b=0.f;
@@ -221,6 +238,7 @@ int main() {
     test_range_band_selects_midtones();
     test_range_invert_flips();
     test_range_default_is_legacy_highpass();
+    test_AC_perceptual_threshold_mask_from_display();
     test_hue_shift_rotates_color();
     if (g_fail) { printf("%d CHECK(s) failed\n", g_fail); return 1; }
     printf("ALL TESTS PASSED\n"); return 0;
