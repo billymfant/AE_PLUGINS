@@ -82,5 +82,51 @@ var Glow = (function() {
     });
   }
 
-  return { apply: apply };
+  // Best-effort render-queue grab of the current frame to `file` (a File).
+  // Fallback only — saveFrameToPng is the primary path on AE 2025+. PNG-sequence
+  // output appends a frame number, so we locate + rename the produced file.
+  function _rqGrab(comp, file) {
+    var rqItem = app.project.renderQueue.items.add(comp);
+    try {
+      rqItem.timeSpanStart    = comp.time;
+      rqItem.timeSpanDuration = comp.frameDuration;
+      var om = rqItem.outputModule(1);
+      try { om.applyTemplate('PNG Sequence'); } catch (e) {}
+      om.file = file;
+      rqItem.render = true;
+      app.project.renderQueue.render();
+      if (!file.exists) {
+        var base = file.name.replace(/\.png$/i, '');
+        var produced = file.parent.getFiles(function (f) {
+          return f.name.indexOf(base) === 0 && /\.png$/i.test(f.name);
+        });
+        if (produced && produced.length) { produced[0].rename(file.name); }
+      }
+      return file.exists;
+    } finally {
+      try { rqItem.remove(); } catch (e2) {}
+    }
+  }
+
+  // Render the active comp's current frame to a temp PNG. Returns { path, width,
+  // height } for the panel to load (thumbnail + real histogram + click-to-pick).
+  function grabFrame() {
+    try {
+      var comp = requireComp();
+      var tmp = new File(Folder.temp.fsName + '/ae_glow_frame_' +
+                         (new Date().getTime()) + '.png');
+      var ok = false;
+      if (typeof comp.saveFrameToPng === 'function') {
+        comp.saveFrameToPng(comp.time, tmp);
+        ok = tmp.exists;
+      }
+      if (!ok) { ok = _rqGrab(comp, tmp); }
+      if (!ok) { return { error: 'Could not grab the current frame.' }; }
+      return { path: tmp.fsName, width: comp.width, height: comp.height };
+    } catch (e) {
+      return { error: e.toString() };
+    }
+  }
+
+  return { apply: apply, grabFrame: grabFrame };
 })();

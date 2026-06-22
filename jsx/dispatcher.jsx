@@ -20,6 +20,7 @@ function dispatch(action, paramsJSON) {
     try {
         var result;
         if      (action === 'glow.apply')          result = Glow.apply(params);
+        else if (action === 'glow.grabFrame')      result = Glow.grabFrame(params);
         else if (action === 'distortions.apply')   result = Distortions.apply(params);
         else if (action === 'colorlab.apply')      result = ColorLab.apply(params);
         else if (action === 'presets.save')      result = PresetsIO.save(params);

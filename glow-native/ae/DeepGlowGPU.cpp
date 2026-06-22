@@ -260,7 +260,17 @@ ReadParams(PF_ParamDef* params[])
 {
     glow::Params p;
 
-    p.intensity     = (float)(params[DG_INTENSITY]->u.fs_d.value / 100.0);
+    // Perceptual Intensity curve: remap the raw % through a power curve so the
+    // low/mid slider travel is fine-grained (gentle default) while the top
+    // still reaches extreme HDR bloom (re-curve, not a cap). Pnom is the % that
+    // maps to a neutral ~1.0x glow; g is the curve exponent. Starting points —
+    // tune live on the 4080 against the cookie shot, then lock the comment.
+    {
+        const float Pnom = 150.f;   // % -> ~1.0x neutral glow (with normalization)
+        const float g    = 2.0f;    // exponent: gentle below Pnom, extreme at the top
+        float P = (float)params[DG_INTENSITY]->u.fs_d.value;   // 0..1000 native
+        p.intensity = powf(P / Pnom, g);
+    }
     p.radius        = (float)(params[DG_RADIUS]->u.fs_d.value);
     p.threshold     = (float)(params[DG_THRESHOLD]->u.fs_d.value / 255.0);
     p.thresholdSoft = (float)(params[DG_THRESHOLD_SOFT]->u.fs_d.value / 100.0);
