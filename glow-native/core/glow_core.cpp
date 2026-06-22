@@ -137,10 +137,13 @@ Image bloom(const Image& src, const Params& p) {
     for (int l=0;l<n;++l) upsampleAdd(mips[l], glow, levelWeight(l,n,p.falloff), p.dimensions);
 
     // 4. per-pixel tint, intensity, tonemap, composite
+    //    Energy-normalize the accumulated glow color so Radius (= mip-level
+    //    count) changes spread, not brightness. Alpha (coverage) is left as-is.
+    const float wnorm = levelWeightNorm(n, p.falloff);
     Image out(src.w, src.h);
     for (int y=0;y<src.h;++y) for (int x=0;x<src.w;++x){
         const float* s = lin.at(x,y);
-        float gr=glow.at(x,y)[0], gg=glow.at(x,y)[1], gb=glow.at(x,y)[2];
+        float gr=glow.at(x,y)[0]*wnorm, gg=glow.at(x,y)[1]*wnorm, gb=glow.at(x,y)[2]*wnorm;
         applyTint(gr,gg,gb,p);
         gr*=p.intensity; gg*=p.intensity; gb*=p.intensity;
         gr=tonemap1(gr,p); gg=tonemap1(gg,p); gb=tonemap1(gb,p);

@@ -62,6 +62,29 @@ static void test_upsample_adds_and_spreads() {
     CHECK(acc.at(x0-1, y0)[0] > 0.0f);
 }
 
+static Image brightField(int W,int H){            // fully bright opaque field
+    Image im(W,H);
+    for(size_t i=0;i<im.px.size();i+=4){ im.px[i]=im.px[i+1]=im.px[i+2]=1.f; im.px[i+3]=1.f; }
+    return im;
+}
+
+static void test_AC_energy_normalized_radius_decoupled(){
+    // On a fully-bright field every qualifying pixel = 1.0, so a downsample +
+    // upsample of the uniform field is still 1.0 at each level. After energy-
+    // normalization the accumulated glow peak ~= 1.0 (the source brightness),
+    // INDEPENDENT of how many mip levels the radius produced. Pre-fix the
+    // un-normalized weight sum inflated this to ~3.6x for Soft falloff.
+    Image src = brightField(128,128);
+    Params a; a.threshold=0.10f; a.radius=30.f;  a.glowOnly=true; a.intensity=1.f;
+    a.linearLight=false; a.tonemap=TONE_NONE; a.falloff=FALLOFF_SOFT; a.blendOp=BLEND_ADD;
+    Params b=a; b.radius=240.f;
+    float pa = bloom(src,a).at(64,64)[0];
+    float pb = bloom(src,b).at(64,64)[0];
+    CHECK(pa > 0.80f && pa < 1.25f);     // ~1x source brightness, NOT 3.6x
+    CHECK(pb > 0.80f && pb < 1.25f);
+    CHECK(std::fabs(pa-pb) < 0.15f);     // brightness decoupled from radius
+}
+
 static void test_AC1_threshold_direction() {
     // AC1: raising the threshold must monotonically REDUCE extracted energy (guards the
     // inverted/mis-scaled-threshold bug). A pure-white square can't show this — every
@@ -187,6 +210,7 @@ int main() {
     test_luma();
     test_bilinear_center();
     test_AC1_threshold_direction();
+    test_AC_energy_normalized_radius_decoupled();
     test_downsample_dims_and_energy();
     test_upsample_adds_and_spreads();
     test_AC2_soft_round_falloff();
