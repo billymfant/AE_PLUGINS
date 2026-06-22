@@ -3,35 +3,54 @@
 window.FactoryPresets = {
 
   glow: {
+    // Every preset targets the BRIGHT spectrum (feathered threshold, open top)
+    // and reads soft (soft falloff, big radius, linear light, soft-clip tonemap).
+    // Intensity is in the new perceptual-curve units (150 ~= neutral 1.0x).
+    // Numbers are starting points — tuned live on real footage (cookie shot).
     'Soft Bloom': {
-      intensity: 120, radius: 80, falloff: 'soft',
-      threshold: 60, glowColor: '#ffffff',
-      colorize: false, saturation: 0, hueShift: 0,
-      blendMode: 'screen', layers: 2, quality: 'quality'
+      intensity: 150, radius: 120, layers: 3, falloff: 'soft',
+      threshold: 190, thresholdSoftness: 55,
+      rangeMode: 1, rangeHigh: 255, rangeHighSoft: 0, invertRange: false,
+      sourceGain: 100, glowColor: '#ffffff', colorize: false, tintAmount: 0,
+      saturation: 0, hueShift: 0, blendMode: 'screen', glowDimensions: 'both',
+      glowOnly: false, linearLight: true, tonemap: 2, highlightComp: 40,
+      quality: 'quality'
     },
     'Neon': {
-      intensity: 300, radius: 28, falloff: 'exponential',
-      threshold: 100, glowColor: '#ff6bff',
-      colorize: true, saturation: 30, hueShift: 0,
-      blendMode: 'add', layers: 3, quality: 'quality'
+      intensity: 220, radius: 55, layers: 3, falloff: 'soft',
+      threshold: 175, thresholdSoftness: 45,
+      rangeMode: 1, rangeHigh: 255, rangeHighSoft: 0, invertRange: false,
+      sourceGain: 110, glowColor: '#ff5bf0', colorize: true, tintAmount: 0,
+      saturation: 25, hueShift: 0, blendMode: 'screen', glowDimensions: 'both',
+      glowOnly: false, linearLight: true, tonemap: 2, highlightComp: 35,
+      quality: 'quality'
     },
     'Aura': {
-      intensity: 180, radius: 120, falloff: 'soft',
-      threshold: 40, glowColor: '#7c6ff7',
-      colorize: true, saturation: 20, hueShift: 10,
-      blendMode: 'screen', layers: 3, quality: 'quality'
+      intensity: 170, radius: 200, layers: 4, falloff: 'soft',
+      threshold: 150, thresholdSoftness: 70,
+      rangeMode: 1, rangeHigh: 255, rangeHighSoft: 0, invertRange: false,
+      sourceGain: 100, glowColor: '#7c8cff', colorize: true, tintAmount: 0,
+      saturation: 12, hueShift: 6, blendMode: 'screen', glowDimensions: 'both',
+      glowOnly: false, linearLight: true, tonemap: 2, highlightComp: 45,
+      quality: 'quality'
     },
     'Flare': {
-      intensity: 420, radius: 18, falloff: 'exponential',
-      threshold: 150, glowColor: '#fffbe0',
-      colorize: false, saturation: 0, hueShift: 0,
-      blendMode: 'add', layers: 2, quality: 'fast'
+      intensity: 240, radius: 90, layers: 3, falloff: 'soft',
+      threshold: 215, thresholdSoftness: 35,
+      rangeMode: 1, rangeHigh: 255, rangeHighSoft: 0, invertRange: false,
+      sourceGain: 100, glowColor: '#fff4d6', colorize: false, tintAmount: 0,
+      saturation: 0, hueShift: 0, blendMode: 'add', glowDimensions: 'both',
+      glowOnly: false, linearLight: true, tonemap: 2, highlightComp: 30,
+      quality: 'quality'
     },
     'Dreamy': {
-      intensity: 75, radius: 200, falloff: 'soft',
-      threshold: 20, glowColor: '#ffd7b5',
-      colorize: true, saturation: -10, hueShift: 0,
-      blendMode: 'screen', layers: 2, quality: 'quality'
+      intensity: 130, radius: 220, layers: 3, falloff: 'soft',
+      threshold: 165, thresholdSoftness: 75,
+      rangeMode: 1, rangeHigh: 255, rangeHighSoft: 0, invertRange: false,
+      sourceGain: 100, glowColor: '#ffd9bf', colorize: true, tintAmount: 0,
+      saturation: -12, hueShift: 0, blendMode: 'screen', glowDimensions: 'both',
+      glowOnly: false, linearLight: true, tonemap: 2, highlightComp: 50,
+      quality: 'quality'
     }
   },
 
