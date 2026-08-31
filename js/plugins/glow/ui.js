@@ -91,16 +91,17 @@ window.GlowUI = (function() {
   }
 
   // ── Interactive Glow Selection widget ───────────────────────
-  // A trapezoidal band over a mode gradient strip. The four x-grips map 1:1 to
-  // the native params: lowKnee=Threshold, lowFoot=Threshold Softness,
-  // highKnee=Range High, highFoot=Range High Softness. Dragging the band:
-  // left/right slides the range, up/down sets Intensity (plateau height).
+  // The grabbed frame's histogram, lit where the glow acts and dimmed where it
+  // doesn't. Two thin markers set the range (Threshold and Range High); the
+  // feathered edges are driven by the Softness slider and drawn straight into
+  // the bars, so the falloff is visible rather than implied. Dragging between
+  // the markers slides the whole range. Intensity has its own slider.
   function makeGlowSelection(state, onCommit, syncSliders) {
     var cv = Utils.el('canvas', { class: 'glow-select' });
     cv.style.width = '100%'; cv.style.height = '150px'; cv.style.display = 'block';
     cv.style.borderRadius = '8px'; cv.style.cursor = 'crosshair';
     var ctx = cv.getContext('2d');
-    var W = 300, H = 150, PAD = 2, railTop = 18, railBot = H - 22, IMAX = 400;
+    var W = 300, H = 150, PAD = 2, railTop = 14, railBot = H - 26;
     var dragging = null, eyedrop = false, frameHist = null; // real 256-bin histogram or null
 
     // Size the backing store to the canvas's real on-screen size × devicePixelRatio
@@ -117,13 +118,11 @@ window.GlowUI = (function() {
       // Assigning width/height clears the canvas, so only touch it on real change.
       if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      W = r.width; H = r.height; railBot = H - 22;
+      W = r.width; H = r.height; railBot = H - 26;
       draw();
     }
     function xOf(v){ return PAD + (v / 255) * (W - 2 * PAD); }
     function vOf(x){ return Math.max(0, Math.min(255, ((x - PAD) / (W - 2 * PAD)) * 255)); }
-    function bandTopY(){ return railBot - Math.max(0, Math.min(IMAX, state.intensity)) / IMAX * (railBot - railTop); }
-    function intOfY(y){ return Math.max(0, Math.min(IMAX, (railBot - y) / (railBot - railTop) * IMAX)); }
 
     function stripStyle() {
       var g = ctx.createLinearGradient(0, 0, W, 0), i;
@@ -143,63 +142,87 @@ window.GlowUI = (function() {
     function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y);
       ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
       ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-    function grip(x, y) { ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.lineTo(x, y - 5); ctx.closePath(); ctx.fill(); }
+
+    // How strongly a tone participates in the glow: 0 outside the range, 1 in
+    // the core, feathered across the soft edges. This is the SAME shape the
+    // engine applies, so lighting the histogram by it shows the real result
+    // instead of a diagram of it.
+    function weightOf(v) {
+      var hd = handles(), w;
+      if (v <= hd.lowFoot || v >= hd.highFoot)      w = 0;
+      else if (v < hd.lowKnee)   w = (hd.lowKnee === hd.lowFoot)   ? 1 : (v - hd.lowFoot) / (hd.lowKnee - hd.lowFoot);
+      else if (v > hd.highKnee)  w = (hd.highFoot === hd.highKnee) ? 1 : (hd.highFoot - v) / (hd.highFoot - hd.highKnee);
+      else w = 1;
+      return state.invertRange ? 1 - w : w;
+    }
 
     function draw() {
       ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = stripStyle(); ctx.fillRect(PAD, railTop, W - 2 * PAD, railBot - railTop);
-      // distribution backdrop: a REAL qualifier histogram of the grabbed frame
-      // when available (on the same 0..255 axis as the band), else a faint
-      // placeholder curve so the widget still reads before any grab.
-      ctx.fillStyle = 'rgba(0,0,0,.30)'; ctx.beginPath(); ctx.moveTo(PAD, railBot);
-      if (frameHist) {
-        for (var hx = 0; hx <= 255; hx++) {
-          ctx.lineTo(xOf(hx), railBot - (railBot - railTop) * frameHist[hx] * 0.92);
-        }
-      } else {
-        for (var x = 0; x <= W; x += 4) { var t = x / W;
-          var h = Math.exp(-Math.pow((t - 0.42) / 0.16, 2)) * 0.7 + Math.exp(-Math.pow((t - 0.8) / 0.08, 2)) * 0.45;
-          ctx.lineTo(PAD + x, railBot - (railBot - railTop) * h * 0.9); }
-      }
-      ctx.lineTo(W - PAD, railBot); ctx.closePath(); ctx.fill();
-
-      var hd = handles();
-      var xLF = xOf(hd.lowFoot), xLK = xOf(hd.lowKnee), xHK = xOf(hd.highKnee), xHF = xOf(hd.highFoot);
-      var yTop = bandTopY();
-      ctx.beginPath(); ctx.moveTo(xLF, railBot); ctx.lineTo(xLK, yTop); ctx.lineTo(xHK, yTop); ctx.lineTo(xHF, railBot); ctx.closePath();
       var accent = state.invertRange ? '#7b8cff' : '#46d3e6';
-      if (!state.invertRange) { ctx.fillStyle = 'rgba(70,211,230,.18)'; ctx.fill(); }
-      ctx.strokeStyle = accent; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = 'rgba(8,9,12,.55)';
-      ctx.fillRect(PAD, railTop, xLF - PAD, railBot - railTop);
-      ctx.fillRect(xHF, railTop, W - PAD - xHF, railBot - railTop);
-      if (state.invertRange) { ctx.fillStyle = 'rgba(123,140,255,.16)';
-        ctx.fillRect(PAD, railTop, xLF - PAD, railBot - railTop); ctx.fillRect(xHF, railTop, W - PAD - xHF, railBot - railTop); }
-      // knee handles
-      function knee(x) { ctx.fillStyle = accent; rr(x - 4, railTop - 8, 8, railBot - railTop + 16, 3); ctx.fill();
-        ctx.fillStyle = '#0c0e12'; ctx.fillRect(x - 0.5, railTop - 2, 1, railBot - railTop + 4); }
-      knee(xLK); knee(xHK);
-      ctx.fillStyle = 'rgba(255,255,255,.5)'; grip(xLF, railBot + 6); grip(xHF, railBot + 6);
-      // intensity grip on plateau top edge
-      var midX = (xLK + xHK) / 2;
-      ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(midX, yTop, 4.5, 0, 7); ctx.fill();
-      ctx.fillStyle = 'rgba(214,218,227,.6)'; ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('⇕ ' + Math.round(state.intensity) + '%', midX, Math.max(10, yTop - 7));
+      var hd = handles();
+
+      // The histogram IS the widget: a real 256-bin distribution of the grabbed
+      // frame, lit where the glow will act and dimmed where it won't. Falls back
+      // to a faint curve so the widget still reads before any Grab Frame.
+      var bars = 128, bw = (W - 2 * PAD) / bars;
+      for (var i = 0; i < bars; i++) {
+        var v = i / (bars - 1) * 255;
+        var h = frameHist ? frameHist[Math.round(v)]
+                          : Math.exp(-Math.pow((v / 255 - 0.42) / 0.16, 2)) * 0.7 +
+                            Math.exp(-Math.pow((v / 255 - 0.80) / 0.08, 2)) * 0.45;
+        var bx = PAD + i * bw, by = railBot - (railBot - railTop) * Math.min(1, h) * 0.94;
+        var bwid = Math.max(1, bw - 0.6);
+        ctx.fillStyle = '#39404d'; ctx.fillRect(bx, by, bwid, railBot - by);
+        var wgt = weightOf(v);
+        if (wgt > 0) {
+          ctx.globalAlpha = wgt; ctx.fillStyle = accent;
+          ctx.fillRect(bx, by, bwid, railBot - by); ctx.globalAlpha = 1;
+        }
+      }
+
+      // A soft wash across the selected span whose edges fade exactly like the
+      // falloff — softness you can see rather than read off a slope.
+      var xLF = xOf(hd.lowFoot), xHF = xOf(hd.highFoot);
+      var span = Math.max(1e-6, hd.highFoot - hd.lowFoot);
+      var wash = ctx.createLinearGradient(xLF, 0, xHF, 0);
+      var tint = state.invertRange ? '123,140,255' : '70,211,230';
+      wash.addColorStop(0, 'rgba(' + tint + ',0)');
+      wash.addColorStop(Math.max(0, Math.min(1, (hd.lowKnee  - hd.lowFoot) / span)), 'rgba(' + tint + ',.13)');
+      wash.addColorStop(Math.max(0, Math.min(1, (hd.highKnee - hd.lowFoot) / span)), 'rgba(' + tint + ',.13)');
+      wash.addColorStop(1, 'rgba(' + tint + ',0)');
+      ctx.fillStyle = wash; ctx.fillRect(xLF, railTop, xHF - xLF, railBot - railTop);
+
+      // Tone reference: a thin strip under the histogram showing which axis the
+      // numbers live on (dark->bright, grey->saturated, or the hue wheel).
+      ctx.fillStyle = stripStyle(); ctx.fillRect(PAD, railBot + 6, W - 2 * PAD, 4);
+
+      // Two markers: a 1px line plus a small cap to grab. The hit area stays
+      // HANDLE_HIT wide (see pick()) — it just isn't drawn that wide, so the
+      // widget stays legible however narrow the panel gets.
+      function marker(x, label) {
+        ctx.fillStyle = accent;
+        ctx.fillRect(x - 0.5, railTop, 1, railBot - railTop);
+        rr(x - 4, railTop - 7, 8, 7, 2); ctx.fill();
+        ctx.fillStyle = 'rgba(214,218,227,.75)';
+        ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(label, Math.max(12, Math.min(W - 12, x)), railBot + 22);
+      }
+      marker(xOf(hd.lowKnee),  Math.round(hd.lowKnee));
+      marker(xOf(hd.highKnee), Math.round(hd.highKnee));
     }
+
+    var HANDLE_HIT = 14;   // px; generous grab zone around each thin marker
     function pick(mx) {
-      var hd = handles(), cand = [['lowKnee', xOf(hd.lowKnee)], ['highKnee', xOf(hd.highKnee)], ['lowFoot', xOf(hd.lowFoot)], ['highFoot', xOf(hd.highFoot)]];
-      var best = null, bd = 14;
+      var hd = handles(), cand = [['lowKnee', xOf(hd.lowKnee)], ['highKnee', xOf(hd.highKnee)]];
+      var best = null, bd = HANDLE_HIT;
       for (var i = 0; i < cand.length; i++) { var d = Math.abs(mx - cand[i][1]); if (d < bd) { bd = d; best = cand[i][0]; } }
       return best;
     }
     function applyHandle(name, v) {
       if (name === 'lowKnee') state.threshold = Math.min(v, state.rangeHigh);
       else if (name === 'highKnee') state.rangeHigh = Math.max(v, state.threshold);
-      else if (name === 'lowFoot') state.thresholdSoftness = Math.max(0, Math.min(100, state.threshold - v));
-      else if (name === 'highFoot') state.rangeHighSoft = Math.max(0, Math.min(100, v - state.rangeHigh));
     }
     function evX(e){ var r = cv.getBoundingClientRect(); return (e.clientX - r.left) * (W / (r.width  || W)); }
-    function evY(e){ var r = cv.getBoundingClientRect(); return (e.clientY - r.top)  * (H / (r.height || H)); }
 
     cv.addEventListener('mousedown', function(e) {
       var x = evX(e);
@@ -217,7 +240,8 @@ window.GlowUI = (function() {
         var lo = dragging.lo + d, hi = dragging.hi + d;
         if (lo < 0) { lo = 0; hi = w; } if (hi > 255) { hi = 255; lo = 255 - w; }
         state.threshold = lo; state.rangeHigh = hi;
-        state.intensity = Math.round(intOfY(evY(e)));
+        // Intensity is NOT set here any more — it has its own slider, and a
+        // hidden vertical drag on the band was a second control for one value.
       } else if (dragging) { applyHandle(dragging, v); }
       draw(); syncSliders();
     }
@@ -270,7 +294,7 @@ window.GlowUI = (function() {
     // New v0.1 fields — guarded so older presets (missing these keys) are safe
     if (p.tintAmount        !== undefined) { _sliders.tintAmount.setValue(p.tintAmount); }
     if (p.sourceGain        !== undefined) { _sliders.sourceGain.setValue(p.sourceGain); }
-    if (p.thresholdSoftness !== undefined) { _sliders.thresholdSoftness.setValue(p.thresholdSoftness); }
+    if (p.thresholdSoftness !== undefined && _sliders.softness) { _sliders.softness.setValue(p.thresholdSoftness); }
     if (p.glowOnly          !== undefined) { _glowOnlyToggle.setValue(p.glowOnly); }
     if (p.useController     !== undefined) { _useControllerToggle.setValue(p.useController); }
     if (p.glowDimensions    !== undefined) { _stretchGroup.setValue(p.glowDimensions); }
@@ -278,7 +302,6 @@ window.GlowUI = (function() {
     // Native-engine fields (guarded for older presets)
     if (p.rangeMode     !== undefined && _rangeModeGroup)        { _rangeModeGroup.setValue(p.rangeMode); }
     if (p.rangeHigh     !== undefined && _sliders.rangeHigh)     { _sliders.rangeHigh.setValue(p.rangeHigh); }
-    if (p.rangeHighSoft !== undefined && _sliders.rangeHighSoft) { _sliders.rangeHighSoft.setValue(p.rangeHighSoft); }
     if (p.invertRange   !== undefined && _invertToggle)         { _invertToggle.setValue(p.invertRange); }
     if (p.linearLight   !== undefined && _linearToggle)        { _linearToggle.setValue(p.linearLight); }
     if (p.tonemap       !== undefined && _tonemapDD)           { _tonemapDD.setValue(p.tonemap); }
@@ -291,10 +314,9 @@ window.GlowUI = (function() {
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Glow Selection'));
     function syncSliders() {
       if (_sliders.threshold)         _sliders.threshold.setValue(Math.round(_state.threshold));
-      if (_sliders.thresholdSoftness) _sliders.thresholdSoftness.setValue(Math.round(_state.thresholdSoftness));
+      if (_sliders.softness)          _sliders.softness.setValue(Math.round(_state.thresholdSoftness));
       if (_sliders.intensity)         _sliders.intensity.setValue(Math.round(_state.intensity));
       if (_sliders.rangeHigh)         _sliders.rangeHigh.setValue(Math.round(_state.rangeHigh));
-      if (_sliders.rangeHighSoft)     _sliders.rangeHighSoft.setValue(Math.round(_state.rangeHighSoft));
     }
     _glowSel = makeGlowSelection(_state, _applyLive, syncSliders);
     container.appendChild(_glowSel.el);
@@ -398,24 +420,34 @@ window.GlowUI = (function() {
     container.appendChild(_rangeModeGroup.el);
     container.appendChild(_invertToggle.el);
     container.appendChild(eyeBtn);
-    _sliders.rangeHigh = new Slider({ label: 'Range High', min: 0, max: 255, value: 255, step: 1, defaultValue: 255,
-      tooltip: 'Upper edge of the glow band (255 = open top: brightest pixels still glow)',
+    // The three numbers behind the widget, kept together and named short enough
+    // to fit .slider-label's 58px column (that fixed width is shared with Color
+    // Lab and Distort, so we shorten the names rather than reflow every tool).
+    _sliders.threshold = new Slider({ label: 'Starts at', min: 0, max: 255, value: 80, step: 1, defaultValue: 80,
+      tooltip: 'Tones brighter than this start to glow — the left marker on the histogram',
+      onChange: function(v) { _state.threshold = v; _glowSel.draw(); } });
+    _sliders.rangeHigh = new Slider({ label: 'Stops at', min: 0, max: 255, value: 255, step: 1, defaultValue: 255,
+      tooltip: 'Tones brighter than this stop glowing (255 = the brightest pixels still glow) — the right marker',
       onChange: function(v) { _state.rangeHigh = v; _glowSel.draw(); } });
-    _sliders.rangeHighSoft = new Slider({ label: 'Range High Soft', min: 0, max: 100, value: 0, step: 1, defaultValue: 0,
-      tooltip: 'Feather above the upper edge of the band',
-      onChange: function(v) { _state.rangeHighSoft = v; _glowSel.draw(); } });
+    // One Softness drives BOTH feathered edges. The engine still takes two
+    // independent values; presets that carry different ones load and render
+    // fine, the slider just shows the low edge.
+    _sliders.softness = new Slider({ label: 'Softness', min: 0, max: 100, value: 20, step: 1, defaultValue: 20,
+      tooltip: 'How gradually the glow fades in and out at the edges of the range',
+      onChange: function(v) { _state.thresholdSoftness = v; _state.rangeHighSoft = v; _glowSel.draw(); } });
+    container.appendChild(_sliders.threshold.el);
     container.appendChild(_sliders.rangeHigh.el);
-    container.appendChild(_sliders.rangeHighSoft.el);
+    container.appendChild(_sliders.softness.el);
 
     // ── Glow ─────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Glow'));
-    _sliders.intensity = new Slider({ label: 'Intensity %', min: 0, max: 500, value: 150, step: 1, defaultValue: 150,
+    _sliders.intensity = new Slider({ label: 'Intensity', min: 0, max: 500, value: 150, step: 1, defaultValue: 150,
       tooltip: 'Overall glow brightness multiplier across all passes',
       onChange: function(v) { _state.intensity = v; } });
     _sliders.radius = new Slider({ label: 'Radius px', min: 0, max: 500, value: 60, step: 1, defaultValue: 60,
       tooltip: 'Blur radius of the glow spread — larger = softer, wider glow',
       onChange: function(v) { _state.radius = v; } });
-    _sliders.layers = new Slider({ label: 'Glow Layers', min: 1, max: 5, value: 2, step: 1, defaultValue: 2,
+    _sliders.layers = new Slider({ label: 'Layers', min: 1, max: 5, value: 2, step: 1, defaultValue: 2,
       tooltip: 'Number of stacked glow passes — more layers = richer, more complex glow',
       onChange: function(v) { _state.layers = v; } });
     _stretchGroup = new ButtonGroup({
@@ -436,14 +468,10 @@ window.GlowUI = (function() {
 
     // ── Source ────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Source'));
-    _sliders.sourceGain = new Slider({ label: 'Source Gain %', min: 0, max: 300, value: 100, step: 1, defaultValue: 100,
+    _sliders.sourceGain = new Slider({ label: 'Src Gain', min: 0, max: 300, value: 100, step: 1, defaultValue: 100,
       tooltip: 'Multiply the glow source brightness before it is blurred — boosts dim sources',
       onChange: function(v) { _state.sourceGain = v; } });
-    _sliders.thresholdSoftness = new Slider({ label: 'Threshold Softness', min: 0, max: 100, value: 20, step: 1, defaultValue: 20,
-      tooltip: 'Softens the glow threshold edge — higher values widen the glow source',
-      onChange: function(v) { _state.thresholdSoftness = v; } });
     container.appendChild(_sliders.sourceGain.el);
-    container.appendChild(_sliders.thresholdSoftness.el);
 
     // ── Falloff ───────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Falloff'));
@@ -457,11 +485,7 @@ window.GlowUI = (function() {
       value: 'soft',
       onChange: function(v) { _state.falloff = v; }
     });
-    _sliders.threshold = new Slider({ label: 'Threshold (0–255)', min: 0, max: 255, value: 80, step: 1, defaultValue: 80,
-      tooltip: 'Minimum pixel brightness to receive glow — raise to restrict glow to bright areas only',
-      onChange: function(v) { _state.threshold = v; } });
     container.appendChild(_falloffGroup.el);
-    container.appendChild(_sliders.threshold.el);
 
     // ── Color ─────────────────────────────────────────────────────────────────
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Color'));
