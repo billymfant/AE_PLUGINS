@@ -86,20 +86,21 @@ __global__ void k_srgb_to_lin(float* px, int w, int h){
     px[i+2] = d_srgb_to_lin(px[i+2]);
 }
 
-/* extractBright: trapezoidal selection band on the chosen Range Mode channel,
-   feathered both feet, optional invert, *sourceGain. Mirrors core exactly via
-   the shared glow::selValue / glow::rangeMask helpers (AC4 parity). */
-__global__ void k_extractBright(const float* src, float* dst, int w, int h, Params p){
+/* extractBright: mask qualified from `disp` (display/sRGB space) so the
+   Threshold matches the user-visible number; color pulled from `lin` (linear)
+   so the blur stays physically correct. Mirrors glow_core.cpp extractBright. */
+__global__ void k_extractBright(const float* disp, const float* lin, float* dst,
+                                int w, int h, Params p){
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     if (x>=w || y>=h) return;
     size_t i = (size_t(y)*w + x)*4;
-    float v = glow::selValue(src[i], src[i+1], src[i+2], p.rangeMode);
+    float v = glow::selValue(disp[i], disp[i+1], disp[i+2], p.rangeMode);
     float m = glow::rangeMask(v, p.threshold, p.thresholdSoft,
                               p.rangeHigh, p.rangeSoftHigh, p.invertRange);
-    dst[i  ] = src[i  ]*m*p.sourceGain;
-    dst[i+1] = src[i+1]*m*p.sourceGain;
-    dst[i+2] = src[i+2]*m*p.sourceGain;
+    dst[i  ] = lin[i  ]*m*p.sourceGain;
+    dst[i+1] = lin[i+1]*m*p.sourceGain;
+    dst[i+2] = lin[i+2]*m*p.sourceGain;
     dst[i+3] = m;
 }
 
@@ -172,12 +173,14 @@ __device__ __forceinline__ float d_tonemap1(float x,const Params& p){
    Writes into `out`. `lin` is the (optionally linearized) source; `glow` is the
    accumulated upsample buffer. */
 __global__ void k_composite(const float* lin, const float* glow, float* out,
-                            int w, int h, Params p){
+                            int w, int h, float wnorm, Params p){
     int x = blockIdx.x*blockDim.x + threadIdx.x;
     int y = blockIdx.y*blockDim.y + threadIdx.y;
     if (x>=w || y>=h) return;
     size_t i = (size_t(y)*w + x)*4;
-    float gr=glow[i], gg=glow[i+1], gb=glow[i+2];
+    // Energy-normalize the glow color (mirror glow_core.cpp step 4). Alpha
+    // (glow[i+3], read below) stays un-normalized — it is coverage, not energy.
+    float gr=glow[i]*wnorm, gg=glow[i+1]*wnorm, gb=glow[i+2]*wnorm;
     d_applyTint(gr,gg,gb,p);
     gr*=p.intensity; gg*=p.intensity; gb*=p.intensity;
     gr=d_tonemap1(gr,p); gg=d_tonemap1(gg,p); gb=d_tonemap1(gb,p);
@@ -232,6 +235,7 @@ extern "C" int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut,
     int nmips = 0;
 
     float* dLin   = nullptr;  // (optionally linearized) source
+    float* dDisp  = nullptr;  // display-space source (mask qualifier, pre-linearize)
     float* dBright= nullptr;  // extractBright output (full res)
     float* dGlow  = nullptr;  // accumulated upsample (full res, zeroed)
     float* dOut   = nullptr;  // composited output (full res)
@@ -239,24 +243,26 @@ extern "C" int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut,
     size_t full = (size_t)w*h*4*sizeof(float);
 
     CU_TRY(cudaMalloc(&dLin,   full));
+    CU_TRY(cudaMalloc(&dDisp,  full));
     CU_TRY(cudaMalloc(&dBright,full));
     CU_TRY(cudaMalloc(&dGlow,  full));
     CU_TRY(cudaMalloc(&dOut,   full));
 
-    CU_TRY(cudaMemcpy(dLin, rgbaIn, full, cudaMemcpyHostToDevice));
+    CU_TRY(cudaMemcpy(dLin,  rgbaIn, full, cudaMemcpyHostToDevice));
+    CU_TRY(cudaMemcpy(dDisp, rgbaIn, full, cudaMemcpyHostToDevice)); // display copy for the mask
     CU_TRY(cudaMemset(dGlow, 0, full));
 
     {
         dim3 g = grid2d(w,h,block);
 
-        // 0. optional linearize (in place on dLin)
+        // 0. optional linearize (in place on dLin; dDisp stays display-space)
         if (p.linearLight){
             k_srgb_to_lin<<<g,block>>>(dLin, w, h);
             CU_TRY(cudaGetLastError());
         }
 
-        // 1. extract bright
-        k_extractBright<<<g,block>>>(dLin, dBright, w, h, p);
+        // 1. extract bright — mask from dDisp (display), color from dLin (linear)
+        k_extractBright<<<g,block>>>(dDisp, dLin, dBright, w, h, p);
         CU_TRY(cudaGetLastError());
 
         // 2. build mip chain (mirror glow::bloom)
@@ -292,7 +298,8 @@ extern "C" int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut,
         }
 
         // 4. composite
-        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, p);
+        float wnorm = glow::levelWeightNorm(nmips, p.falloff);
+        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, wnorm, p);
         CU_TRY(cudaGetLastError());
 
         // 5. optional de-linearize
@@ -309,6 +316,7 @@ extern "C" int glow_bloom_cuda(const float* rgbaIn, float* rgbaOut,
 fail:
     for (int i=0;i<nmips;++i) if (mips[i].p) cudaFree(mips[i].p);
     if (dLin)    cudaFree(dLin);
+    if (dDisp)   cudaFree(dDisp);
     if (dBright) cudaFree(dBright);
     if (dGlow)   cudaFree(dGlow);
     if (dOut)    cudaFree(dOut);
@@ -375,6 +383,7 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
     int nmips = 0;
 
     float* dLin   = nullptr;
+    float* dDisp  = nullptr;  // display-space source (mask qualifier, pre-linearize)
     float* dBright= nullptr;
     float* dGlow  = nullptr;
     float* dOut   = nullptr;
@@ -385,12 +394,14 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
     size_t full = (size_t)w*h*4*sizeof(float);
 
     CU_TRY(cudaMalloc(&dLin,   full));
+    CU_TRY(cudaMalloc(&dDisp,  full));
     CU_TRY(cudaMalloc(&dBright,full));
     CU_TRY(cudaMalloc(&dGlow,  full));
     CU_TRY(cudaMalloc(&dOut,   full));
     CU_TRY(cudaMemset(dGlow, 0, full));
-    // Zero the canvas first so areas outside the input are transparent black.
+    // Zero both canvases first so areas outside the input are transparent black.
     CU_TRY(cudaMemset(dLin,  0, full));
+    CU_TRY(cudaMemset(dDisp, 0, full));
 
     {
         dim3 g = grid2d(w,h,block);
@@ -401,9 +412,12 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
             srcBGRA, srcPitch, inW, inH, dLin, w, h, offX, offY);
         CU_TRY(cudaGetLastError());
 
+        // Keep a display-space copy for the mask qualifier before linearizing.
+        CU_TRY(cudaMemcpy(dDisp, dLin, full, cudaMemcpyDeviceToDevice));
+
         if (p.linearLight){ k_srgb_to_lin<<<g,block>>>(dLin, w, h); CU_TRY(cudaGetLastError()); }
 
-        k_extractBright<<<g,block>>>(dLin, dBright, w, h, p);
+        k_extractBright<<<g,block>>>(dDisp, dLin, dBright, w, h, p);
         CU_TRY(cudaGetLastError());
 
         int minDim = w<h?w:h;
@@ -433,7 +447,8 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
             CU_TRY(cudaGetLastError());
         }
 
-        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, p);
+        float wnorm = glow::levelWeightNorm(nmips, p.falloff);
+        k_composite<<<g,block>>>(dLin, dGlow, dOut, w, h, wnorm, p);
         CU_TRY(cudaGetLastError());
 
         if (p.linearLight){ k_lin_to_srgb<<<g,block>>>(dOut, w, h); CU_TRY(cudaGetLastError()); }
@@ -449,6 +464,7 @@ extern "C" int glow_bloom_cuda_gpu(const float* srcBGRA, float* dstBGRA,
 fail:
     for (int i=0;i<nmips;++i) if (mips[i].p) cudaFree(mips[i].p);
     if (dLin)    cudaFree(dLin);
+    if (dDisp)   cudaFree(dDisp);
     if (dBright) cudaFree(dBright);
     if (dGlow)   cudaFree(dGlow);
     if (dOut)    cudaFree(dOut);

@@ -62,6 +62,18 @@ inline float levelWeight(int l, int levels, int falloff) {
     return 1.0f / std::sqrt(float(l + 1)); // SOFT (default)
 }
 
+// Energy-normalization factor for the across-levels accumulation: 1 / sum of
+// the per-level weights. Multiplying the accumulated glow by this makes the
+// bloom energy-preserving, so Radius/Layers change spread & softness only, not
+// brightness. Host-only (called on the host side of BOTH engines), so it stays
+// in parity by construction.
+inline float levelWeightNorm(int levels, int falloff) {
+    if (levels < 1) levels = 1;
+    float s = 0.f;
+    for (int l = 0; l < levels; ++l) s += levelWeight(l, levels, falloff);
+    return (s > 1e-6f) ? 1.f / s : 1.f;
+}
+
 // Number of mip levels to build for an image of min-dimension `minDim`.
 // radius -> how many halvings reach that spread; capped by image size and 10.
 inline int autoLevels(float radius, int minDim) {

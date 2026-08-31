@@ -18,7 +18,7 @@ struct Image {
 float luma(float r, float g, float b);                 // Rec.709
 void  sampleBilinear(const Image& s, float u, float v, float out[4]); // u,v in pixel space, clamp-to-edge
 
-Image extractBright(const Image& src, const Params& p);          // threshold/knee*gain -> bright buffer
+Image extractBright(const Image& disp, const Image& lin, const Params& p); // mask from display, color from lin
 Image downsampleHalf(const Image& src);                          // 13-tap -> ceil(w/2) x ceil(h/2)
 void  upsampleAdd(const Image& low, Image& hi, float weight, int dimensions); // 9-tap tent, hi += w*up(low)
 Image bloom(const Image& src, const Params& p);                  // full pipeline -> composited output

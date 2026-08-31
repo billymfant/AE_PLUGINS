@@ -33,6 +33,43 @@ window.GlowUI = (function() {
 
   function getParams() { return Utils.deepClone(_state); }
 
+  // Mirror of glow::selValue (glow_params.h): qualifier value 0..1 for a pixel
+  // under the current Range Mode, in DISPLAY space (matches the engine's now-
+  // perceptual threshold). Keep bit-aligned with the C++ helper.
+  function selValueJS(r, g, b, mode) {
+    if (mode === 2) {                                  // saturation (HSV)
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      return mx <= 1e-6 ? 0 : (mx - mn) / mx;
+    }
+    if (mode === 3) {                                  // hue 0..1
+      var hmx = Math.max(r, g, b), hmn = Math.min(r, g, b), d = hmx - hmn;
+      if (d <= 1e-6) return 0;
+      var h;
+      if      (hmx === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (hmx === g) h = (b - r) / d + 2;
+      else                h = (r - g) / d + 4;
+      return h / 6;
+    }
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;       // luminance (Rec.709)
+  }
+
+  // 256-bin distribution of the qualifier over a canvas ImageData, normalized
+  // to 0..1 (peak bin = 1). Skips fully-transparent pixels. Drawn behind the
+  // selection band on the same 0..255 axis.
+  function computeHistogram(imageData, mode) {
+    var bins = new Array(256), i;
+    for (i = 0; i < 256; i++) bins[i] = 0;
+    var px = imageData.data, n = px.length, mx = 0;
+    for (var p = 0; p < n; p += 4) {
+      if (px[p + 3] === 0) continue;
+      var v = selValueJS(px[p] / 255, px[p + 1] / 255, px[p + 2] / 255, mode);
+      var b = v < 0 ? 0 : (v > 1 ? 255 : Math.round(v * 255));
+      bins[b]++; if (bins[b] > mx) mx = bins[b];
+    }
+    if (mx > 0) for (var k = 0; k < 256; k++) bins[k] /= mx;
+    return bins;
+  }
+
   var _sliders = {};
   var _falloffGroup, _blendDD, _qualityGroup, _glowColor, _colorizeToggle, _status;
   var _glowOnlyToggle, _useControllerToggle, _stretchGroup;
@@ -64,7 +101,7 @@ window.GlowUI = (function() {
     cv.style.borderRadius = '8px'; cv.style.cursor = 'crosshair';
     var ctx = cv.getContext('2d');
     var W = 300, H = 150, PAD = 2, railTop = 18, railBot = H - 22, IMAX = 400;
-    var dragging = null, eyedrop = false;
+    var dragging = null, eyedrop = false, frameHist = null; // real 256-bin histogram or null
 
     function fit() {
       var r = cv.getBoundingClientRect();
@@ -102,11 +139,19 @@ window.GlowUI = (function() {
     function draw() {
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = stripStyle(); ctx.fillRect(PAD, railTop, W - 2 * PAD, railBot - railTop);
-      // decorative distribution backdrop (placeholder until real AE histogram)
-      ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.moveTo(PAD, railBot);
-      for (var x = 0; x <= W; x += 4) { var t = x / W;
-        var h = Math.exp(-Math.pow((t - 0.42) / 0.16, 2)) * 0.7 + Math.exp(-Math.pow((t - 0.8) / 0.08, 2)) * 0.45;
-        ctx.lineTo(PAD + x, railBot - (railBot - railTop) * h * 0.9); }
+      // distribution backdrop: a REAL qualifier histogram of the grabbed frame
+      // when available (on the same 0..255 axis as the band), else a faint
+      // placeholder curve so the widget still reads before any grab.
+      ctx.fillStyle = 'rgba(0,0,0,.30)'; ctx.beginPath(); ctx.moveTo(PAD, railBot);
+      if (frameHist) {
+        for (var hx = 0; hx <= 255; hx++) {
+          ctx.lineTo(xOf(hx), railBot - (railBot - railTop) * frameHist[hx] * 0.92);
+        }
+      } else {
+        for (var x = 0; x <= W; x += 4) { var t = x / W;
+          var h = Math.exp(-Math.pow((t - 0.42) / 0.16, 2)) * 0.7 + Math.exp(-Math.pow((t - 0.8) / 0.08, 2)) * 0.45;
+          ctx.lineTo(PAD + x, railBot - (railBot - railTop) * h * 0.9); }
+      }
       ctx.lineTo(W - PAD, railBot); ctx.closePath(); ctx.fill();
 
       var hd = handles();
@@ -173,6 +218,7 @@ window.GlowUI = (function() {
     return {
       el: cv, draw: draw, fit: fit,
       setMode: function(m){ state.rangeMode = m; draw(); },
+      setHistogram: function(arr){ frameHist = arr; draw(); },
       setEyedrop: function(on){ eyedrop = on; cv.style.cursor = on ? 'copy' : 'crosshair'; }
     };
   }
@@ -226,11 +272,79 @@ window.GlowUI = (function() {
     }
     _glowSel = makeGlowSelection(_state, _applyLive, syncSliders);
     container.appendChild(_glowSel.el);
+
+    // ── Frame preview (real eyedropper) ──────────────────────────────────────
+    // A grabbed comp frame. Clicking it samples the real pixel and centers the
+    // band; grabbing also rebuilds the histogram behind the band.
+    var _thumbCv = Utils.el('canvas', { class: 'glow-thumb' });
+    _thumbCv.style.width = '100%'; _thumbCv.style.height = '90px';
+    _thumbCv.style.display = 'block'; _thumbCv.style.borderRadius = '8px';
+    _thumbCv.style.cursor = 'crosshair'; _thumbCv.style.marginTop = '6px';
+    var _thumbCtx = _thumbCv.getContext('2d');
+    var _thumbLoaded = false;
+    container.appendChild(_thumbCv);
+
+    function refreshHistogram() {
+      if (!_thumbLoaded) return;
+      var data = _thumbCtx.getImageData(0, 0, _thumbCv.width, _thumbCv.height);
+      _glowSel.setHistogram(computeHistogram(data, _state.rangeMode));
+    }
+
+    var grabBtn = Utils.el('button', { class: 'mini-btn' }, 'Grab Frame ⤓');
+    grabBtn.addEventListener('click', function () {
+      var old = grabBtn.textContent; grabBtn.disabled = true; grabBtn.textContent = 'grabbing frame…';
+      Bridge.call('glow.grabFrame', {}).then(function (r) {
+        grabBtn.disabled = false; grabBtn.textContent = old;
+        if (!r || r.error) {
+          if (_status) { _status.className = 'status-bar error'; _status.textContent = (r && r.error) || 'Grab failed.'; }
+          return;
+        }
+        var img = new Image();
+        img.onload = function () {
+          var dpr = window.devicePixelRatio || 1;
+          var cw = _thumbCv.clientWidth || 280, ch = 90;
+          _thumbCv.width = Math.round(cw * dpr); _thumbCv.height = Math.round(ch * dpr);
+          _thumbCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          _thumbCtx.clearRect(0, 0, cw, ch);
+          _thumbCtx.drawImage(img, 0, 0, cw, ch);
+          _thumbLoaded = true;
+          refreshHistogram();
+          if (_status) { _status.className = 'status-bar success'; _status.textContent = 'Frame grabbed — click it to pick.'; }
+        };
+        img.onerror = function () {
+          if (_status) { _status.className = 'status-bar error'; _status.textContent = 'Could not load grabbed frame.'; }
+        };
+        img.src = 'file:///' + String(r.path).replace(/\\/g, '/');
+      }).catch(function (e) {
+        grabBtn.disabled = false; grabBtn.textContent = old;
+        if (_status) { _status.className = 'status-bar error'; _status.textContent = e.message; }
+      });
+    });
+    container.appendChild(grabBtn);
+
+    // Click the frame: sample the pixel, compute its qualifier for the current
+    // Range Mode, and center the band on it with soft feet (mirrors centerBand).
+    _thumbCv.addEventListener('click', function (e) {
+      if (!_thumbLoaded) return;
+      var r = _thumbCv.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      var px = Math.round((e.clientX - r.left) * dpr);
+      var py = Math.round((e.clientY - r.top) * dpr);
+      px = Math.max(0, Math.min(_thumbCv.width - 1, px));
+      py = Math.max(0, Math.min(_thumbCv.height - 1, py));
+      var d = _thumbCtx.getImageData(px, py, 1, 1).data;
+      var v = selValueJS(d[0] / 255, d[1] / 255, d[2] / 255, _state.rangeMode) * 255;
+      _state.threshold = Math.max(0, v - 22);
+      _state.rangeHigh = Math.min(255, v + 22);
+      _state.thresholdSoftness = 14; _state.rangeHighSoft = 14;
+      _glowSel.draw(); syncSliders(); _applyLive();
+    });
+
     _rangeModeGroup = new ButtonGroup({
       tooltip: 'Which channel the glow selection qualifies on — Luminance, Saturation, or Hue',
       options: [ { value: 1, label: 'Luma' }, { value: 2, label: 'Sat' }, { value: 3, label: 'Hue' } ],
       value: 1,
-      onChange: function(v) { _state.rangeMode = v; _glowSel.setMode(v); _applyLive(); }
+      onChange: function(v) { _state.rangeMode = v; _glowSel.setMode(v); refreshHistogram(); _applyLive(); }
     });
     _invertToggle = new Toggle({ label: 'Invert Range', value: false,
       tooltip: 'Glow everything OUTSIDE the selected band instead of inside it',
