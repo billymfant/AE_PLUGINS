@@ -103,13 +103,22 @@ window.GlowUI = (function() {
     var W = 300, H = 150, PAD = 2, railTop = 18, railBot = H - 22, IMAX = 400;
     var dragging = null, eyedrop = false, frameHist = null; // real 256-bin histogram or null
 
+    // Size the backing store to the canvas's real on-screen size × devicePixelRatio
+    // so the widget stays pixel-crisp at any panel width and on any display density.
     function fit() {
       var r = cv.getBoundingClientRect();
+      // A hidden tab (.tab-pane { display:none }) measures 0. Fitting to a
+      // fallback width here would bake a too-small bitmap that CSS then stretches
+      // when the tab is shown — that was the pixelation. Skip; the ResizeObserver
+      // fires again the moment the pane becomes visible and reports a real width.
+      if (!r.width || !r.height) return;
       var dpr = window.devicePixelRatio || 1;
-      var w = r.width || 300;
-      cv.width = Math.round(w * dpr); cv.height = Math.round(150 * dpr);
+      var bw  = Math.round(r.width * dpr), bh = Math.round(r.height * dpr);
+      // Assigning width/height clears the canvas, so only touch it on real change.
+      if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      W = w; H = 150; draw();
+      W = r.width; H = r.height; railBot = H - 22;
+      draw();
     }
     function xOf(v){ return PAD + (v / 255) * (W - 2 * PAD); }
     function vOf(x){ return Math.max(0, Math.min(255, ((x - PAD) / (W - 2 * PAD)) * 255)); }
@@ -189,8 +198,8 @@ window.GlowUI = (function() {
       else if (name === 'lowFoot') state.thresholdSoftness = Math.max(0, Math.min(100, state.threshold - v));
       else if (name === 'highFoot') state.rangeHighSoft = Math.max(0, Math.min(100, v - state.rangeHigh));
     }
-    function evX(e){ var r = cv.getBoundingClientRect(); return e.clientX - r.left; }
-    function evY(e){ var r = cv.getBoundingClientRect(); return (e.clientY - r.top) * (150 / r.height); }
+    function evX(e){ var r = cv.getBoundingClientRect(); return (e.clientX - r.left) * (W / (r.width  || W)); }
+    function evY(e){ var r = cv.getBoundingClientRect(); return (e.clientY - r.top)  * (H / (r.height || H)); }
 
     cv.addEventListener('mousedown', function(e) {
       var x = evX(e);
@@ -214,6 +223,23 @@ window.GlowUI = (function() {
     }
     window.addEventListener('mousemove', function(e) { if (dragging) onMove(e); });
     window.addEventListener('mouseup', function() { if (dragging) { dragging = null; onCommit(); } });
+
+    // Refit whenever the canvas's box actually changes — this covers the panel
+    // being dragged wider/narrower AND the 0 -> real-width transition when the
+    // Glow tab is switched on for the first time (same approach as the Color Lab
+    // wheel, js/plugins/colorlab/ui.js).
+    if (window.ResizeObserver) { new ResizeObserver(function () { fit(); }).observe(cv); }
+
+    // Density changes (panel dragged to a monitor with different scaling) don't
+    // change the CSS box, so ResizeObserver won't fire — watch dppx instead and
+    // re-arm, since each query only matches the density it was created for.
+    (function watchDpr() {
+      if (!window.matchMedia) return;
+      var mq = window.matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx)');
+      var onChange = function () { fit(); watchDpr(); };
+      if (mq.addEventListener) mq.addEventListener('change', onChange, { once: true });
+      else if (mq.addListener) mq.addListener(onChange);
+    }());
 
     return {
       el: cv, draw: draw, fit: fit,
@@ -282,7 +308,26 @@ window.GlowUI = (function() {
     _thumbCv.style.cursor = 'crosshair'; _thumbCv.style.marginTop = '6px';
     var _thumbCtx = _thumbCv.getContext('2d');
     var _thumbLoaded = false;
+    var _thumbImg = null;          // kept so the thumb can be REDRAWN on resize
     container.appendChild(_thumbCv);
+
+    // Redraw the grabbed frame at the canvas's current on-screen size × DPR.
+    // Keeping the source Image around means a panel resize re-renders it sharp
+    // instead of stretching the bitmap that was baked at grab time.
+    function paintThumb() {
+      if (!_thumbImg) return;
+      var r = _thumbCv.getBoundingClientRect();
+      if (!r.width || !r.height) return;      // hidden tab — refit when shown
+      var dpr = window.devicePixelRatio || 1;
+      var bw = Math.round(r.width * dpr), bh = Math.round(r.height * dpr);
+      if (_thumbCv.width !== bw || _thumbCv.height !== bh) { _thumbCv.width = bw; _thumbCv.height = bh; }
+      _thumbCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      _thumbCtx.clearRect(0, 0, r.width, r.height);
+      _thumbCtx.drawImage(_thumbImg, 0, 0, r.width, r.height);
+    }
+    if (window.ResizeObserver) {
+      new ResizeObserver(function () { paintThumb(); refreshHistogram(); }).observe(_thumbCv);
+    }
 
     function refreshHistogram() {
       if (!_thumbLoaded) return;
@@ -301,13 +346,8 @@ window.GlowUI = (function() {
         }
         var img = new Image();
         img.onload = function () {
-          var dpr = window.devicePixelRatio || 1;
-          var cw = _thumbCv.clientWidth || 280, ch = 90;
-          _thumbCv.width = Math.round(cw * dpr); _thumbCv.height = Math.round(ch * dpr);
-          _thumbCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          _thumbCtx.clearRect(0, 0, cw, ch);
-          _thumbCtx.drawImage(img, 0, 0, cw, ch);
-          _thumbLoaded = true;
+          _thumbImg = img; _thumbLoaded = true;
+          paintThumb();
           refreshHistogram();
           if (_status) { _status.className = 'status-bar success'; _status.textContent = 'Frame grabbed — click it to pick.'; }
         };
