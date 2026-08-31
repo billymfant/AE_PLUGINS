@@ -80,42 +80,42 @@ window.FactoryPresets = {
       engine: 'flow', dfMapType: 3, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 4, dfWavePhase: 0,
       dfNoiseScale: 3, dfNoiseDetail: 3, dfNoiseSeed: 1, dfContrast: 0,
       dfDispMode: 1, dfAmount: 60, dfFlowDir: 1, dfFlowSpeed: 0.3, dfLoop: 1, dfEasing: 1,
-      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 3, dfOpacity: 100, dfMosaic: 0,
+      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 4, dfOpacity: 100, dfMosaic: 0,
       dfSlatRows: 16, dfSlatCols: 16, dfSlatStagger: 60, dfTargetMode: 'selectedLayers'
     },
     'Venetian Blinds': {
       engine: 'flow', dfMapType: 3, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 6, dfWavePhase: 0,
       dfNoiseScale: 3, dfNoiseDetail: 3, dfNoiseSeed: 1, dfContrast: 0,
       dfDispMode: 1, dfAmount: 40, dfFlowDir: 1, dfFlowSpeed: 0.2, dfLoop: 1, dfEasing: 1,
-      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 3, dfOpacity: 100, dfMosaic: 0,
+      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 4, dfOpacity: 100, dfMosaic: 0,
       dfSlatRows: 24, dfSlatCols: 0, dfSlatStagger: 100, dfTargetMode: 'selectedLayers'
     },
     'Ripple Grid': {
       engine: 'flow', dfMapType: 2, dfAngle: 0, dfSpacing: 6, dfWaveFreq: 4, dfWavePhase: 0,
       dfNoiseScale: 3, dfNoiseDetail: 3, dfNoiseSeed: 1, dfContrast: 0,
       dfDispMode: 1, dfAmount: 50, dfFlowDir: 3, dfFlowSpeed: 0.4, dfLoop: 1, dfEasing: 5,
-      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 3, dfOpacity: 100, dfMosaic: 0,
+      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 4, dfOpacity: 100, dfMosaic: 0,
       dfSlatRows: 20, dfSlatCols: 20, dfSlatStagger: 40, dfTargetMode: 'selectedLayers'
     },
     'Liquid Wave': {
       engine: 'flow', dfMapType: 3, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 4, dfWavePhase: 0,
       dfNoiseScale: 3, dfNoiseDetail: 3, dfNoiseSeed: 1, dfContrast: 0,
       dfDispMode: 1, dfAmount: 50, dfFlowDir: 1, dfFlowSpeed: 0.5, dfLoop: 1, dfEasing: 5,
-      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 3, dfOpacity: 100, dfMosaic: 0,
+      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 4, dfOpacity: 100, dfMosaic: 0,
       dfSlatRows: 0, dfSlatCols: 0, dfSlatStagger: 0, dfTargetMode: 'selectedLayers'
     },
     'Noise Drift': {
       engine: 'flow', dfMapType: 4, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 4, dfWavePhase: 0,
       dfNoiseScale: 4, dfNoiseDetail: 4, dfNoiseSeed: 7, dfContrast: 10,
       dfDispMode: 2, dfAmount: 60, dfFlowDir: 1, dfFlowSpeed: 0.4, dfLoop: 1, dfEasing: 1,
-      dfJitter: 10, dfJitterSeed: 3, dfPhase: 0, dfEdge: 3, dfOpacity: 100, dfMosaic: 0,
+      dfJitter: 10, dfJitterSeed: 3, dfPhase: 0, dfEdge: 4, dfOpacity: 100, dfMosaic: 0,
       dfSlatRows: 0, dfSlatCols: 0, dfSlatStagger: 0, dfTargetMode: 'selectedLayers'
     },
     'Mosaic Shuffle': {
       engine: 'flow', dfMapType: 4, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 4, dfWavePhase: 0,
       dfNoiseScale: 3, dfNoiseDetail: 3, dfNoiseSeed: 1, dfContrast: 0,
       dfDispMode: 1, dfAmount: 40, dfFlowDir: 1, dfFlowSpeed: 0.5, dfLoop: 1, dfEasing: 1,
-      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 3, dfOpacity: 100, dfMosaic: 24,
+      dfJitter: 0, dfJitterSeed: 1, dfPhase: 0, dfEdge: 4, dfOpacity: 100, dfMosaic: 24,
       dfSlatRows: 0, dfSlatCols: 0, dfSlatStagger: 0, dfTargetMode: 'selectedLayers'
     }
   },

@@ -128,7 +128,9 @@ static void test_warp_known_shift(){
 static void test_warp_mosaic_blocks(){
     // mosaicBlock=4, amount 0 -> no displacement; each block samples its own center.
     // block [0,4) center ax=2 -> red 2 across it; block [4,8) center ax=6 -> red 6.
-    Image src=ramp_x(8,1), dst(8,1);
+    // Image is one block tall (h=4) so the block's Y-centre (ay=2) is in-bounds; with
+    // the transparent default an off-image centre would (correctly) read 0.
+    Image src=ramp_x(8,4), dst(8,4);
     Params P; P.mapType=MAP_GRADIENT; P.amount=0.f; P.mosaicBlock=4.f;
     warp(src,dst,P,nullptr,0.f);
     NEAR(dst.at(1,0)[0], 2.f, 1e-4f);
@@ -171,6 +173,29 @@ static void test_warp_opacity_zero_is_source(){
     warp(src,dst,P,nullptr,0.f);
     for(size_t i=0;i<src.px.size();++i) NEAR(dst.px[i],src.px[i],1e-4f);
 }
+static void test_default_edge_is_transparent(){
+    // A layer distortion must not invent opaque pixels outside the source. The
+    // out-of-box default must be transparent edges (the smear/streak bug was the
+    // old replicating default).
+    CHECK(Params().edgeMode == EDGE_TRANSPARENT);
+}
+static void test_warp_default_no_oob_replication(){
+    // Fully-opaque src; a fixed displacement large enough to push the right edge's
+    // sample fully off the frame. With the correct default (transparent) those dst
+    // pixels read 0000; the old replicating default (clamp/mirror) smeared the edge
+    // colour into them -> the vertical streak the user reported.
+    Image src=solid_rgba(8,4, 0.7f,0.2f,0.1f, 1.f), dst;
+    Params P;                                  // defaults only
+    P.mapType=MAP_GRADIENT; P.spacing=0.f;     // field +1 everywhere
+    P.displaceMode=DISP_FIXED; P.angleDeg=0.f; // pure +X displacement
+    P.amount=20.f;                             // x+20 is off-frame for every column
+    warp(src,dst,P,nullptr,0.f);
+    // every dst pixel sampled fully off the right edge -> transparent, not replicated
+    for(int y=0;y<4;y++) for(int x=0;x<8;x++){
+        const float* o=dst.at(x,y);
+        NEAR(o[3], 0.f, 1e-4f);                // alpha 0 (no edge replication)
+    }
+}
 static void test_warp_layer_map_luma(){
     // MAP_LAYER: a white map -> luma 1 -> field 2*1-1=+1; fixed angle0 amount2
     // dst samples src at x + 1*2 = x+2
@@ -188,6 +213,7 @@ int main(){
     test_ease_endpoints_monotonic(); test_flow_static_is_one(); test_flow_weight_dir(); test_flow_jitter_deterministic_and_bounded();
     test_bilinear_integer_exact(); test_bilinear_midpoint_average(); test_edge_clamp_outside(); test_edge_transparent_outside();
     test_warp_identity_when_amount_zero(); test_warp_known_shift(); test_warp_opacity_zero_is_source(); test_warp_layer_map_luma();
+    test_default_edge_is_transparent(); test_warp_default_no_oob_replication();
     test_warp_mosaic_blocks();
     test_warp_slats_rows_uniform_shift(); test_warp_slats_stagger_alternates_bands(); test_warp_slats_cols_uniform_shift();
     if (g_fail==0) printf("ALL PASS\n"); else printf("%d FAILED\n", g_fail);

@@ -100,7 +100,7 @@ ParamsSetup(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[], PF_
     PF_ADD_FLOAT_SLIDERX("Phase", 0, 1, 0, 1, 0, PF_Precision_THOUSANDTHS, 0, 0, DFP_PHASE);
 
     AEFX_CLR_STRUCT(def);
-    PF_ADD_POPUP("Edges", 4, distort::EDGE_MIRROR, DF_EDGE_CHOICES, DFP_EDGE);  // default Mirror: fills the canvas
+    PF_ADD_POPUP("Edges", 4, distort::EDGE_TRANSPARENT, DF_EDGE_CHOICES, DFP_EDGE);  // default Transparent: displaced content reveals transparency (no edge-replication smear)
     AEFX_CLR_STRUCT(def);
     PF_ADD_FLOAT_SLIDERX("Opacity", 0, 100, 0, 100, 100, PF_Precision_INTEGER, 0, 0, DFP_OPACITY);
     AEFX_CLR_STRUCT(def);

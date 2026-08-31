@@ -44,7 +44,7 @@ struct Params {
     int   jitterSeed  = 1;
     float phase       = 0.f;     // 0..1 base phase
     // output
-    int   edgeMode    = EDGE_CLAMP;
+    int   edgeMode    = EDGE_TRANSPARENT; // layer distortion: displaced content reveals transparency, not a replicated-edge smear
     float opacity     = 1.f;     // 0..1 blend warped over source
     float mosaicBlock = 0.f;     // px; >=1 quantizes the warp into solid blocks (mosaic shuffle)
     // slats (auto-weave): rigid Rows/Cols that slide (rows->X, cols->Y). 0 = off.

@@ -48,14 +48,75 @@ window.DistortionsUI = (function() {
     dfJitter:     0,
     dfJitterSeed: 1,
     dfPhase:      0,
-    dfEdge:       3,    // 1 Clamp 2 Wrap 3 Mirror 4 Transparent
+    dfEdge:       4,    // 1 Clamp 2 Wrap 3 Mirror 4 Transparent (default: no edge-replication smear)
     dfOpacity:    100,
     dfMosaic:     0,
     dfSlatRows:   0,
     dfSlatCols:   0,
     dfSlatStagger:0,
-    dfTargetMode: 'selectedLayers'
+    dfTargetMode: 'selectedLayers',
+
+    // ── Simple controls (panel-only; the .aex never sees these) ──────────────
+    //    Style bakes the fiddly params to a known-good look; Scale is a 0..100
+    //    proxy for whichever size knob matters for that look.
+    dfStyle:      'wave',
+    dfScale:      78
   };
+
+  // Style → baked params, so picking a Style and hitting Apply looks right with
+  // no further fiddling. Amounts are in PIXELS and were tuned for ~1080p footage
+  // (verified headlessly via distort-native/cli on the clean test card at 1/3
+  // scale). Every style pins Edges to Transparent — the post-smear-fix default.
+  var STYLE_PRESETS = {
+    wave: {   // Liquid Wave — smooth in-place ripple; object stays whole
+      dfMapType: 3, dfDispMode: 1, dfAmount: 60, dfFlowSpeed: 0.5, dfEasing: 5,
+      dfFlowDir: 1, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 3, dfWavePhase: 0,
+      dfContrast: 0, dfJitter: 0, dfEdge: 4, dfMosaic: 0,
+      dfSlatRows: 0, dfSlatCols: 0, dfSlatStagger: 0
+    },
+    noise: {  // Noise Warp — organic wobble along the field gradient
+      dfMapType: 4, dfDispMode: 2, dfAmount: 45, dfFlowSpeed: 0.4, dfEasing: 1,
+      dfFlowDir: 1, dfAngle: 0, dfSpacing: 4, dfNoiseScale: 3, dfNoiseDetail: 3,
+      dfNoiseSeed: 7, dfContrast: 0, dfJitter: 0, dfJitterSeed: 1, dfEdge: 4,
+      dfMosaic: 0, dfSlatRows: 0, dfSlatCols: 0, dfSlatStagger: 0
+    },
+    mosaic: { // Mosaic — block SHUFFLE. Needs a high-frequency, high-contrast map:
+              // on a smooth map neighbouring blocks displace alike and it reads as
+              // mere pixelation rather than a shuffle.
+      dfMapType: 4, dfDispMode: 1, dfAmount: 90, dfFlowSpeed: 0.5, dfEasing: 1,
+      dfFlowDir: 1, dfAngle: 0, dfSpacing: 4, dfNoiseScale: 10, dfNoiseDetail: 2,
+      dfNoiseSeed: 1, dfContrast: 70, dfJitter: 0, dfEdge: 4, dfMosaic: 36,
+      dfSlatRows: 0, dfSlatCols: 0, dfSlatStagger: 0
+    },
+    slats: {  // Woven Slats — rigid bands sliding over/under
+      dfMapType: 3, dfDispMode: 1, dfAmount: 60, dfFlowSpeed: 0.3, dfEasing: 1,
+      dfFlowDir: 1, dfAngle: 0, dfSpacing: 4, dfWaveFreq: 4, dfWavePhase: 0,
+      dfContrast: 0, dfJitter: 0, dfEdge: 4, dfMosaic: 0,
+      dfSlatRows: 16, dfSlatCols: 16, dfSlatStagger: 60
+    }
+  };
+
+  // Which size knob "Scale" drives per style, and over what range. `invert`
+  // means the underlying param is a FREQUENCY (higher = smaller features), so a
+  // bigger Scale must lower it. `also` mirrors the value onto a second field.
+  var SCALE_MAP = {
+    wave:   { field: 'dfWaveFreq',   lo: 0.5, hi: 12,  invert: true,  round: 2 },
+    noise:  { field: 'dfNoiseScale', lo: 0.5, hi: 12,  invert: true,  round: 2 },
+    mosaic: { field: 'dfMosaic',     lo: 4,   hi: 64,  invert: false, round: 0 },
+    slats:  { field: 'dfSlatRows',   lo: 4,   hi: 48,  invert: true,  round: 0, also: 'dfSlatCols' }
+  };
+
+  function _scaleToField(m, scale) {
+    var t = Utils.clamp(scale, 0, 100) / 100;
+    if (m.invert) t = 1 - t;
+    return Utils.round(m.lo + t * (m.hi - m.lo), m.round);
+  }
+
+  function _fieldToScale(m, v) {
+    var t = Utils.clamp((v - m.lo) / (m.hi - m.lo), 0, 1);
+    if (m.invert) t = 1 - t;
+    return Math.round(t * 100);
+  }
 
   function getParams() { return Utils.deepClone(_state); }
 
@@ -99,6 +160,7 @@ window.DistortionsUI = (function() {
       if (_df.hasOwnProperty(k) && p[k] !== undefined && _df[k]) { _df[k].setValue(p[k]); }
     }
     if (p.engine !== undefined) _showEngine(p.engine);
+    _syncSimpleFromState();   // keep Style/Scale honest about what the preset set
     _liveFlow();   // push the loaded preset onto an existing effect, if any
   }
 
@@ -310,7 +372,35 @@ window.DistortionsUI = (function() {
   }
 
   // ── Native Distort Flow (DistortFlow.aex) — map-driven warp engine ───────────
-  function _buildFlow(container) {
+  function _buildFlow(outer) {
+    // ── Look — the four knobs that matter. Style bakes the rest. ─────────────
+    outer.appendChild(Utils.el('div', { class: 'section-label' }, 'Look'));
+    _df.dfStyle = new Dropdown({ label: 'Style',
+      tooltip: 'Picks a look and sets the underlying map/displace/edge params to known-good values. Fine-tune under Advanced.',
+      options: [
+        { value: 'wave',   label: 'Liquid Wave' }, { value: 'noise',  label: 'Noise Warp' },
+        { value: 'mosaic', label: 'Mosaic' },      { value: 'slats',  label: 'Woven Slats' }
+      ],
+      value: _state.dfStyle,
+      onChange: function(v) { _setStyle(v); } });
+    outer.appendChild(_df.dfStyle.el);
+
+    _df.dfAmount = _mk('dfAmount', { label: 'Strength', min: 0, max: 400, value: _state.dfAmount, step: 1, defaultValue: 60,
+      tooltip: 'How far pixels are pushed, in pixels (0 = no warp)' });
+    _df.dfScale = new Slider({ label: 'Scale', min: 0, max: 100, value: _state.dfScale, step: 1, defaultValue: 78,
+      tooltip: 'Size of the distortion features for the current Style (bigger = coarser)',
+      onChange: function(v) { _setScale(v); } });
+    _df.dfFlowSpeed = _mk('dfFlowSpeed', { label: 'Speed', min: -4, max: 4, value: _state.dfFlowSpeed, step: 0.01, decimals: 2, defaultValue: 0.5,
+      tooltip: 'Animation speed in cycles/second (0 = static)' });
+    outer.appendChild(_df.dfAmount.el);
+    outer.appendChild(_df.dfScale.el);
+    outer.appendChild(_df.dfFlowSpeed.el);
+
+    // ── Advanced — the full engine, collapsed by default ─────────────────────
+    outer.appendChild(Utils.el('div', { class: 'section-label' }, 'Advanced'));
+    var container = Utils.el('div', {});
+    outer.appendChild(container);
+
     // Map
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Map'));
     _df.dfMapType = new Dropdown({ label: 'Map Type',
@@ -357,10 +447,7 @@ window.DistortionsUI = (function() {
       ],
       value: _state.dfDispMode,
       onChange: function(v) { _state.dfDispMode = parseInt(v, 10); _liveFlow(); } });
-    container.appendChild(_df.dfDispMode.el);
-    _df.dfAmount = _mk('dfAmount', { label: 'Amount px', min: 0, max: 400, value: 40, step: 1, defaultValue: 40,
-      tooltip: 'Displacement strength in pixels (0 = no warp)' });
-    container.appendChild(_df.dfAmount.el);
+    container.appendChild(_df.dfDispMode.el);   // Amount lives up in Look as "Strength"
 
     // Flow (animation)
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Flow'));
@@ -372,10 +459,7 @@ window.DistortionsUI = (function() {
       ],
       value: _state.dfFlowDir,
       onChange: function(v) { _state.dfFlowDir = parseInt(v, 10); _liveFlow(); } });
-    container.appendChild(_df.dfFlowDir.el);
-    _df.dfFlowSpeed = _mk('dfFlowSpeed', { label: 'Flow Speed cyc/s', min: -4, max: 4, value: 0, step: 0.01, decimals: 2, defaultValue: 0,
-      tooltip: 'Animation speed in cycles/second (0 = static)' });
-    container.appendChild(_df.dfFlowSpeed.el);
+    container.appendChild(_df.dfFlowDir.el);    // Flow Speed lives up in Look as "Speed"
     _df.dfLoop = new Dropdown({ label: 'Loop',
       tooltip: 'Time looping behaviour',
       options: [ { value: 1, label: 'Loop' }, { value: 2, label: 'Ping-Pong' }, { value: 3, label: 'Once' } ],
@@ -404,7 +488,7 @@ window.DistortionsUI = (function() {
     // Output
     container.appendChild(Utils.el('div', { class: 'section-label' }, 'Output'));
     _df.dfEdge = new Dropdown({ label: 'Edges',
-      tooltip: 'Edge handling. Mirror fills the canvas (no transparent gaps).',
+      tooltip: 'Edge handling. Transparent (default) lets displaced content reveal transparency; Mirror/Clamp/Wrap fill the canvas by replicating edge pixels.',
       options: [
         { value: 1, label: 'Clamp' }, { value: 2, label: 'Wrap' }, { value: 3, label: 'Mirror' }, { value: 4, label: 'Transparent' }
       ],
@@ -430,8 +514,8 @@ window.DistortionsUI = (function() {
     container.appendChild(_df.dfSlatCols.el);
     container.appendChild(_df.dfSlatStagger.el);
 
-    // Apply Target
-    container.appendChild(Utils.el('div', { class: 'section-label' }, 'Apply Target'));
+    // Apply Target — outside Advanced so collapsing never hides the Apply button
+    outer.appendChild(Utils.el('div', { class: 'section-label' }, 'Apply Target'));
     _df.dfTargetMode = new Dropdown({ label: 'Target',
       tooltip: 'Where to apply Distort Flow',
       options: [
@@ -441,15 +525,77 @@ window.DistortionsUI = (function() {
       ],
       value: _state.dfTargetMode,
       onChange: function(v) { _state.dfTargetMode = v; } });
-    container.appendChild(_df.dfTargetMode.el);
+    outer.appendChild(_df.dfTargetMode.el);
 
     // Apply button + status
     var flowBtn = Utils.el('button', { class: 'action-btn' }, 'Apply Distort Flow');
     flowBtn.addEventListener('click', function() { _applyFlow(flowBtn); });
-    container.appendChild(flowBtn);
+    outer.appendChild(flowBtn);
 
     _flowStatus = Utils.el('div', { class: 'status-bar' }, '');
-    container.appendChild(_flowStatus);
+    outer.appendChild(_flowStatus);
+
+    // Bake in the default Style, then collapse Advanced. makeCollapsible is
+    // idempotent (data-collapsible guard), so app.js's later pass is a no-op here.
+    _setStyle(_state.dfStyle, true);
+    if (window.Sections && Sections.makeCollapsible) {
+      Sections.makeCollapsible(outer);
+      var labels = outer.querySelectorAll('.section-label');
+      for (var i = 0; i < labels.length; i++) {
+        if (labels[i].textContent.indexOf('Advanced') !== -1) { labels[i].click(); break; }
+      }
+    }
+  }
+
+  // Apply a Style: bake its params, resync every native widget, re-derive Scale.
+  // `silent` skips the live push (used at build time, before anything exists).
+  function _setStyle(style, silent) {
+    var preset = STYLE_PRESETS[style];
+    if (!preset) return;
+    _state.dfStyle = style;
+    Object.assign(_state, preset);
+    // Scale is meaningless across styles (different underlying field) — re-derive
+    // it from the style's own baked value so the slider reads the truth.
+    var m = SCALE_MAP[style];
+    _state.dfScale = _fieldToScale(m, _state[m.field]);
+    _syncFlowWidgets();
+    if (!silent) _liveFlow();
+  }
+
+  // Scale: drive whichever size knob the current Style maps to.
+  function _setScale(scale) {
+    var m = SCALE_MAP[_state.dfStyle];
+    if (!m) return;
+    _state.dfScale = scale;
+    var v = _scaleToField(m, scale);
+    _state[m.field] = v;
+    if (_df[m.field]) _df[m.field].setValue(v);
+    if (m.also) {
+      _state[m.also] = v;
+      if (_df[m.also]) _df[m.also].setValue(v);
+    }
+    _liveFlow();
+  }
+
+  // Push _state onto every native widget (Look + Advanced) without firing live.
+  function _syncFlowWidgets() {
+    for (var k in _df) {
+      if (_df.hasOwnProperty(k) && _df[k] && _state[k] !== undefined) _df[k].setValue(_state[k]);
+    }
+  }
+
+  // Derive Style + Scale from raw native fields — used after a preset load so
+  // the simple controls agree with whatever the preset actually set.
+  function _syncSimpleFromState() {
+    var style = 'wave';
+    if (_state.dfSlatRows > 0 || _state.dfSlatCols > 0) style = 'slats';
+    else if (_state.dfMosaic >= 1)                      style = 'mosaic';
+    else if (_state.dfMapType === 4)                    style = 'noise';
+    _state.dfStyle = style;
+    var m = SCALE_MAP[style];
+    _state.dfScale = _fieldToScale(m, _state[m.field]);
+    if (_df.dfStyle) _df.dfStyle.setValue(style);
+    if (_df.dfScale) _df.dfScale.setValue(_state.dfScale);
   }
 
   // Make a native-param Slider that writes _state[field]; returns the Slider.
